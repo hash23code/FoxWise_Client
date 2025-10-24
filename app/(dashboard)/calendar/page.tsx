@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, Briefcase, Filter, List, Grid } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, Briefcase, Filter, List, Grid, Download } from 'lucide-react'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
 import type { CalendarEvent, Employee } from '@/types'
 
 type ViewMode = 'month' | 'list'
@@ -86,6 +88,54 @@ export default function CalendarPage() {
     return 'bg-purple-500/20 text-purple-400'
   }
 
+  const exportToPDF = () => {
+    const doc = new jsPDF()
+
+    // Title
+    doc.setFontSize(20)
+    doc.text('Calendrier', 14, 20)
+
+    // Subtitle
+    doc.setFontSize(12)
+    doc.text(`${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`, 14, 30)
+
+    if (selectedEmployee !== 'all') {
+      const employee = employees.find(e => e.id === selectedEmployee)
+      if (employee) {
+        doc.text(`Employé: ${employee.full_name || employee.email}`, 14, 37)
+      }
+    }
+
+    // Prepare data for table
+    const tableData = events
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .map(event => {
+        const employee = employees.find(e => e.id === event.assigned_to)
+        const date = new Date(event.start_time)
+        return [
+          date.toLocaleDateString('fr-FR'),
+          date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+          event.title,
+          event.event_type === 'job' ? 'Job' : 'Événement',
+          employee ? (employee.full_name || employee.email) : '-',
+          event.client?.name || '-'
+        ]
+      })
+
+    // Add table
+    ;(doc as any).autoTable({
+      startY: selectedEmployee !== 'all' ? 42 : 35,
+      head: [['Date', 'Heure', 'Titre', 'Type', 'Employé', 'Client']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [249, 115, 22] },
+      styles: { fontSize: 9 }
+    })
+
+    // Save PDF
+    doc.save(`calendrier-${monthNames[currentDate.getMonth()]}-${currentDate.getFullYear()}.pdf`)
+  }
+
   const renderCalendarDays = () => {
     const days = []
     const totalDays = daysInMonth(currentDate)
@@ -155,6 +205,14 @@ export default function CalendarPage() {
           <p className="text-gray-400 mt-1">{events.length} événement{events.length > 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={exportToPDF}
+            className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:from-orange-600 hover:to-red-700 transition-all flex items-center gap-2"
+          >
+            <Download className="w-5 h-5" />
+            Exporter PDF
+          </button>
+
           <select
             value={selectedEmployee}
             onChange={(e) => setSelectedEmployee(e.target.value)}
