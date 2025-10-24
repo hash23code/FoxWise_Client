@@ -119,7 +119,7 @@ export default function ActivitiesPage() {
         {activities.map((activity) => (
           <div
             key={activity.id}
-            className="bg-gray-900 border border-gray-800 rounded-xl p-6 hover:border-cyan-500/50 transition-all"
+            className="bg-gray-900 border border-gray-800 rounded-xl p-6 hover:border-cyan-500/50 transition-all group"
           >
             <div className="flex items-start justify-between mb-4">
               <div
@@ -131,7 +131,7 @@ export default function ActivitiesPage() {
                   style={{ backgroundColor: activity.color }}
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => handleEdit(activity)}
                   className="p-2 text-gray-400 hover:text-cyan-400 transition-colors"
