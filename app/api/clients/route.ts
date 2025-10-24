@@ -15,7 +15,7 @@ export async function GET() {
         *,
         sector:fc_sectors(*)
       `)
-      .eq('user_id', userId)
+      .or(`user_id.eq.${userId},user_id.eq.system`)
       .order('created_at', { ascending: false })
 
     if (error) throw error

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Search, Filter, List as ListIcon, Table as TableIcon, FileDown, Edit, Trash2, MapPin, Mail, Phone, Building2, Clock } from 'lucide-react'
+import { Plus, Search, Filter, List as ListIcon, Table as TableIcon, FileDown, Edit, Trash2, MapPin, Mail, Phone, Building2, Clock, X } from 'lucide-react'
 import type { Client, Sector, ViewMode } from '@/types'
 
 export default function ClientsPage() {
@@ -15,6 +15,17 @@ export default function ClientsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    postal_code: '',
+    sector_id: '',
+    status: 'active' as const,
+    notes: ''
+  })
 
   useEffect(() => {
     fetchData()
@@ -37,6 +48,68 @@ export default function ClientsPage() {
       console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenModal = (client?: Client) => {
+    if (client) {
+      setEditingClient(client)
+      setFormData({
+        name: client.name,
+        email: client.email || '',
+        phone: client.phone || '',
+        address: client.address || '',
+        city: client.city || '',
+        postal_code: client.postal_code || '',
+        sector_id: client.sector_id || '',
+        status: client.status,
+        notes: client.notes || ''
+      })
+    } else {
+      setEditingClient(null)
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        postal_code: '',
+        sector_id: '',
+        status: 'active',
+        notes: ''
+      })
+    }
+    setShowAddModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowAddModal(false)
+    setEditingClient(null)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    try {
+      const url = editingClient ? `/api/clients?id=${editingClient.id}` : '/api/clients'
+      const method = editingClient ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+
+      if (res.ok) {
+        await fetchData()
+        handleCloseModal()
+      } else {
+        const error = await res.json()
+        alert('Erreur: ' + (error.error || 'Erreur inconnue'))
+      }
+    } catch (error) {
+      console.error('Error saving client:', error)
+      alert('Erreur lors de la sauvegarde')
     }
   }
 
@@ -93,10 +166,7 @@ export default function ClientsPage() {
           <p className="text-gray-400 mt-1">{filteredClients.length} client{filteredClients.length > 1 ? 's' : ''}</p>
         </div>
         <button
-          onClick={() => {
-            setEditingClient(null)
-            setShowAddModal(true)
-          }}
+          onClick={() => handleOpenModal()}
           className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all flex items-center gap-2"
         >
           <Plus className="w-5 h-5" />
@@ -214,10 +284,7 @@ export default function ClientsPage() {
 
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={() => {
-                      setEditingClient(client)
-                      setShowAddModal(true)
-                    }}
+                    onClick={() => handleOpenModal(client)}
                     className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
                   >
                     <Edit className="w-4 h-4" />
@@ -301,10 +368,7 @@ export default function ClientsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => {
-                            setEditingClient(client)
-                            setShowAddModal(true)
-                          }}
+                          onClick={() => handleOpenModal(client)}
                           className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
                         >
                           <Edit className="w-4 h-4" />
@@ -339,7 +403,7 @@ export default function ClientsPage() {
           </p>
           {clients.length === 0 && (
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => handleOpenModal()}
               className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all"
             >
               Ajouter votre premier client
@@ -348,23 +412,175 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal - Simple version for now */}
+      {/* Add/Edit Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              {editingClient ? 'Modifier le Client' : 'Nouveau Client'}
-            </h2>
-            <p className="text-gray-400">Modal complet à implémenter - Utilisez l&apos;API /api/clients</p>
-            <button
-              onClick={() => {
-                setShowAddModal(false)
-                setEditingClient(null)
-              }}
-              className="mt-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              Fermer
-            </button>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">
+                {editingClient ? 'Modifier le Client' : 'Nouveau Client'}
+              </h2>
+              <button
+                onClick={handleCloseModal}
+                className="p-2 text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Nom */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Nom *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  placeholder="Nom du client"
+                />
+              </div>
+
+              {/* Email & Phone */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                    placeholder="email@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Téléphone
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                    placeholder="514-555-0000"
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Adresse
+                </label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  placeholder="123 Rue Example"
+                />
+              </div>
+
+              {/* City & Postal Code */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Ville
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                    placeholder="Montreal"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Code Postal
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.postal_code}
+                    onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                    placeholder="H1A 1A1"
+                  />
+                </div>
+              </div>
+
+              {/* Sector & Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Secteur
+                  </label>
+                  <select
+                    value={formData.sector_id}
+                    onChange={(e) => setFormData({ ...formData, sector_id: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="">Aucun secteur</option>
+                    {sectors.map(sector => (
+                      <option key={sector.id} value={sector.id}>{sector.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Statut
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="active">Actif</option>
+                    <option value="inactive">Inactif</option>
+                    <option value="prospect">Prospect</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Notes
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  placeholder="Notes additionnelles..."
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-4 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all"
+                >
+                  {editingClient ? 'Mettre à jour' : 'Créer le Client'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="px-6 py-3 bg-gray-800 text-gray-300 rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
