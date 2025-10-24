@@ -9,6 +9,9 @@ export interface User {
   updated_at: string
 }
 
+// Employee is a User with role 'employee'
+export type Employee = User
+
 // ==================== SECTOR TYPES ====================
 export interface Sector {
   id: string
