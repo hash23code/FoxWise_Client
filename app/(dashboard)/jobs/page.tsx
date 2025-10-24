@@ -15,13 +15,25 @@ export default function JobsPage() {
   const [selectedPriority, setSelectedPriority] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
   const [editingJob, setEditingJob] = useState<Job | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string
+    description: string
+    client_id: string
+    activity_id: string
+    status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+    priority: 'low' | 'medium' | 'high' | 'urgent'
+    scheduled_date: string
+    estimated_hours: string
+    estimated_cost: string
+    notes: string
+    assigned_to: string
+  }>({
     title: '',
     description: '',
     client_id: '',
     activity_id: '',
-    status: 'pending' as const,
-    priority: 'medium' as const,
+    status: 'pending',
+    priority: 'medium',
     scheduled_date: '',
     estimated_hours: '',
     estimated_cost: '',
