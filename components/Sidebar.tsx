@@ -61,6 +61,12 @@ export default function Sidebar() {
       gradient: "from-green-500 to-emerald-500"
     },
     {
+      name: "Activités",
+      href: "/activities",
+      icon: Briefcase,
+      gradient: "from-cyan-500 to-blue-500"
+    },
+    {
       name: "Secteurs",
       href: "/sectors",
       icon: Building2,
