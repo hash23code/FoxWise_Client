@@ -73,7 +73,7 @@ export default function DashboardPage() {
           Tableau de Bord
         </h1>
         <p className="text-gray-400">
-          Vue d'ensemble de votre activité
+          Vue d&apos;ensemble de votre activité
         </p>
       </div>
 
@@ -124,7 +124,7 @@ export default function DashboardPage() {
           <h2 className="text-xl font-semibold text-white mb-4">Activité Récente</h2>
           <div className="space-y-3 text-gray-400">
             <p className="text-sm">Aucune activité récente</p>
-            <p className="text-xs">Les dernières actions s'afficheront ici</p>
+            <p className="text-xs">Les dernières actions s&apos;afficheront ici</p>
           </div>
         </div>
       </div>

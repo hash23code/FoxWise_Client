@@ -27,7 +27,7 @@ export default function SectorsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Secteurs</h1>
-          <p className="text-gray-400 mt-1">Organisez vos clients par secteur d'activité</p>
+          <p className="text-gray-400 mt-1">Organisez vos clients par secteur d&apos;activité</p>
         </div>
         <button className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-orange-600 hover:to-red-700 transition-all flex items-center gap-2">
           <Plus className="w-5 h-5" />

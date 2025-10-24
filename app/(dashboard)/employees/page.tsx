@@ -19,7 +19,7 @@ export default function EmployeesPage() {
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
         <div className="max-w-md mx-auto">
           <div className="text-6xl mb-4">👥</div>
-          <h2 className="text-2xl font-semibold text-white mb-2">Gestion d'Équipe</h2>
+          <h2 className="text-2xl font-semibold text-white mb-2">Gestion d&apos;Équipe</h2>
           <p className="text-gray-400 mb-6">
             Ajoutez et gérez vos employés pour leur assigner des jobs
           </p>
