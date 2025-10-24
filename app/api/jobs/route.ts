@@ -37,6 +37,7 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     console.log('Creating job with data:', body)
+    console.log('User ID:', userId)
 
     const { data, error } = await supabase
       .from('fc_jobs')
@@ -45,14 +46,26 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
-      console.error('Supabase error:', error)
-      throw error
+      console.error('Supabase error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      return NextResponse.json({
+        error: 'Database error',
+        details: error.message,
+        hint: error.hint
+      }, { status: 500 })
     }
 
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Jobs POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Internal server error',
+      details: error?.message || 'Unknown error'
+    }, { status: 500 })
   }
 }
 

@@ -116,14 +116,25 @@ export default function JobsPage() {
     e.preventDefault()
 
     try {
-      const payload = {
-        ...formData,
-        estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : null,
-        estimated_cost: formData.estimated_cost ? parseFloat(formData.estimated_cost) : null,
+      const payload: any = {
+        title: formData.title,
+        description: formData.description || null,
+        status: formData.status,
+        priority: formData.priority,
         client_id: formData.client_id || null,
         activity_id: formData.activity_id || null,
-        assigned_to: formData.assigned_to || null
+        assigned_to: formData.assigned_to || null,
+        estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : null,
+        estimated_cost: formData.estimated_cost ? parseFloat(formData.estimated_cost) : null,
+        notes: formData.notes || null
       }
+
+      // Only add scheduled_date if it's provided
+      if (formData.scheduled_date) {
+        payload.scheduled_date = formData.scheduled_date
+      }
+
+      console.log('Submitting job payload:', payload)
 
       const url = editingJob ? `/api/jobs?id=${editingJob.id}` : '/api/jobs'
       const method = editingJob ? 'PUT' : 'POST'
@@ -139,6 +150,7 @@ export default function JobsPage() {
         handleCloseModal()
       } else {
         const error = await res.json()
+        console.error('Server error:', error)
         alert('Erreur: ' + (error.error || 'Erreur inconnue'))
       }
     } catch (error) {
