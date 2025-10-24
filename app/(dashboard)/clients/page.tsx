@@ -15,7 +15,17 @@ export default function ClientsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    email: string
+    phone: string
+    address: string
+    city: string
+    postal_code: string
+    sector_id: string
+    status: 'active' | 'inactive' | 'prospect'
+    notes: string
+  }>({
     name: '',
     email: '',
     phone: '',
@@ -23,7 +33,7 @@ export default function ClientsPage() {
     city: '',
     postal_code: '',
     sector_id: '',
-    status: 'active' as const,
+    status: 'active',
     notes: ''
   })
 

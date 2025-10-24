@@ -16,6 +16,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmployee])
 
   const fetchData = async () => {
