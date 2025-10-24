@@ -10,10 +10,14 @@ export default function EmployeesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    full_name: string
+    email: string
+    role: 'manager' | 'employee'
+  }>({
     full_name: '',
     email: '',
-    role: 'employee' as const
+    role: 'employee'
   })
 
   useEffect(() => {
