@@ -19,7 +19,6 @@ export default function JobsPage() {
     title: string
     description: string
     client_id: string
-    activity_id: string
     status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
     priority: 'low' | 'medium' | 'high' | 'urgent'
     scheduled_date: string
@@ -31,7 +30,6 @@ export default function JobsPage() {
     title: '',
     description: '',
     client_id: '',
-    activity_id: '',
     status: 'pending',
     priority: 'medium',
     scheduled_date: '',
@@ -79,7 +77,6 @@ export default function JobsPage() {
         title: job.title,
         description: job.description || '',
         client_id: job.client_id || '',
-        activity_id: job.activity_id || '',
         status: job.status,
         priority: job.priority,
         scheduled_date: job.scheduled_date ? new Date(job.scheduled_date).toISOString().split('T')[0] : '',
@@ -94,7 +91,6 @@ export default function JobsPage() {
         title: '',
         description: '',
         client_id: '',
-        activity_id: '',
         status: 'pending',
         priority: 'medium',
         scheduled_date: '',
@@ -122,7 +118,6 @@ export default function JobsPage() {
         status: formData.status,
         priority: formData.priority,
         client_id: formData.client_id || null,
-        activity_id: formData.activity_id || null,
         assigned_to: formData.assigned_to || null,
         estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : null,
         estimated_cost: formData.estimated_cost ? parseFloat(formData.estimated_cost) : null,
@@ -151,7 +146,7 @@ export default function JobsPage() {
       } else {
         const error = await res.json()
         console.error('Server error:', error)
-        alert('Erreur: ' + (error.error || 'Erreur inconnue'))
+        alert('Erreur: ' + (error.details || error.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error saving job:', error)
@@ -444,28 +439,6 @@ export default function JobsPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Activité
-                  </label>
-                  <select
-                    value={formData.activity_id}
-                    onChange={(e) => {
-                      const activity = activities.find(a => a.id === e.target.value)
-                      setFormData({
-                        ...formData,
-                        activity_id: e.target.value,
-                        estimated_cost: activity?.default_cost?.toString() || formData.estimated_cost
-                      })
-                    }}
-                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                  >
-                    <option value="">Sélectionner une activité</option>
-                    {activities.map(activity => (
-                      <option key={activity.id} value={activity.id}>{activity.name}</option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               {/* Status & Priority */}
