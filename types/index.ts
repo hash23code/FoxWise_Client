@@ -54,6 +54,9 @@ export interface Client {
   address: string | null
   city: string | null
   postal_code: string | null
+  latitude: number | null
+  longitude: number | null
+  formatted_address: string | null
   sector_id: string | null
   status: 'active' | 'inactive' | 'prospect'
   notes: string | null
@@ -93,6 +96,12 @@ export interface Job {
   payment_status: 'unpaid' | 'partial' | 'paid'
   amount_paid: number
   notes: string | null
+  latitude: number | null
+  longitude: number | null
+  location_status: 'pending' | 'assigned' | 'en_route' | 'arrived' | 'completed'
+  is_urgent: boolean
+  arrived_at: string | null
+  completed_at: string | null
   created_at: string
   updated_at: string
   client?: Client
@@ -232,4 +241,53 @@ export interface ActivityFormData {
   description: string
   default_cost: number
   color: string
+}
+
+// ==================== GEOLOCATION TYPES ====================
+export interface EmployeeLocation {
+  id: string
+  user_id: string
+  clerk_user_id: string
+  latitude: number
+  longitude: number
+  heading: number | null
+  speed: number | null
+  accuracy: number | null
+  updated_at: string
+}
+
+export interface MapMarker {
+  id: string
+  type: 'job' | 'employee' | 'client'
+  latitude: number
+  longitude: number
+  title: string
+  description?: string
+  color: 'green' | 'orange' | 'red' | 'blue'
+  data: Job | EmployeeLocation | Client
+}
+
+export interface NavigationRoute {
+  geometry: any
+  distance: number
+  duration: number
+  steps: RouteStep[]
+}
+
+export interface RouteStep {
+  instruction: string
+  distance: number
+  duration: number
+  maneuver: {
+    type: string
+    modifier?: string
+    bearing_before?: number
+    bearing_after?: number
+    location: [number, number]
+  }
+}
+
+export interface WeatherEffect {
+  type: 'rain' | 'snow' | 'fog' | 'clear'
+  intensity: number
 }
