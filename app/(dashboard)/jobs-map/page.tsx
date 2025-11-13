@@ -51,6 +51,7 @@ export default function JobsMapPage() {
     // Poll for employee locations every 10 seconds
     const interval = setInterval(fetchEmployeeLocations, 10000)
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchData = async () => {

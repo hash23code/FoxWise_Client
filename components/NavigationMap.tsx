@@ -155,6 +155,7 @@ export default function NavigationMap({
     if (!map.current || !userLocation || !destination.latitude || !destination.longitude) return
 
     fetchRoute(userLocation.lng, userLocation.lat, destination.longitude, destination.latitude)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, destination])
 
   // Fetch route from Mapbox Directions API

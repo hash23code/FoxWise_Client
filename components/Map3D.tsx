@@ -116,6 +116,7 @@ export default function Map3D({
     return () => {
       map.current?.remove()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey])
 
   // Add weather effects
@@ -138,9 +139,9 @@ export default function Map3D({
 
     for (let i = 0; i < particleCount; i++) {
       particles.push({
-        type: 'Feature',
+        type: 'Feature' as const,
         geometry: {
-          type: 'Point',
+          type: 'Point' as const,
           coordinates: [
             lng + (Math.random() - 0.5) * 0.1,
             lat + (Math.random() - 0.5) * 0.1
@@ -153,7 +154,7 @@ export default function Map3D({
     map.current.addSource('weather-particles', {
       type: 'geojson',
       data: {
-        type: 'FeatureCollection',
+        type: 'FeatureCollection' as const,
         features: particles
       }
     })
@@ -230,6 +231,7 @@ export default function Map3D({
 
       markers.current.push(marker)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs, employeeLocations])
 
   // Track user location
@@ -266,6 +268,7 @@ export default function Map3D({
         }
       }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, enableNavigation, jobs])
 
   // Get job color based on status
@@ -366,6 +369,7 @@ export default function Map3D({
     if (map.current) {
       addWeatherEffect(weatherEffect)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weatherEffect])
 
   return (

@@ -47,6 +47,7 @@ export default function NavigationPage() {
 
       return () => navigator.geolocation.clearWatch(watchId)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchJobs = async () => {
@@ -215,7 +216,7 @@ export default function NavigationPage() {
           <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Aucun Job Assigné</h2>
           <p className="text-gray-400">
-            Vous n'avez aucun job assigné pour le moment. Contactez votre gestionnaire pour plus d'informations.
+            Vous n&apos;avez aucun job assigné pour le moment. Contactez votre gestionnaire pour plus d&apos;informations.
           </p>
         </div>
       </div>
