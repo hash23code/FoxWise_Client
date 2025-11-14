@@ -147,13 +147,6 @@ export default function GPSTestPage() {
 
       console.log('✅ Effets 3D ajoutés')
 
-      // Initialize precipitation (will be updated by weather state)
-      try {
-        (map.current as any).setPrecipitation({ type: 'none' })
-      } catch (error) {
-        console.log('Precipitation not supported')
-      }
-
       // Add trail source for movement trail
       map.current.addSource('trail', {
         type: 'geojson',
@@ -401,7 +394,7 @@ export default function GPSTestPage() {
     }
   }, [currentPosition, viewMode, followGPS])
 
-  // Update weather/precipitation effects
+  // Update weather/precipitation effects using real Mapbox API
   useEffect(() => {
     if (!map.current) return
 
@@ -409,44 +402,58 @@ export default function GPSTestPage() {
       const mapAny = map.current as any
 
       if (weather === 'rain') {
-        mapAny.setPrecipitation({
-          type: 'rain',
-          density: 1,
-          intensity: 1,
-          color: '#919191',
-          opacity: 0.5,
-          centerThinning: 0,
-          directionAzimuth: 0,
-          directionPolar: 50,
-          dropletSizeX: 1,
-          dropletSizeY: 10,
-          distortionStrength: 0.5,
-          vignette: 0.5,
-          vignetteColor: '#6e6e6e'
-        })
+        // Clear snow first if it was active
+        if (typeof mapAny.setSnow === 'function') {
+          mapAny.setSnow(null)
+        }
+        // Set rain with official Mapbox API
+        if (typeof mapAny.setRain === 'function') {
+          mapAny.setRain({
+            density: 0.8,
+            intensity: 1.0,
+            color: '#a8adbc',
+            opacity: 0.7,
+            vignette: 1.0,
+            'vignette-color': '#464646',
+            direction: [0, 80],
+            'droplet-size': [2.6, 18.2],
+            'distortion-strength': 0.7,
+            'center-thinning': 0
+          })
+          console.log('✅ Rain enabled')
+        }
       } else if (weather === 'snow') {
-        mapAny.setPrecipitation({
-          type: 'snow',
-          density: 0.8,
-          intensity: 1,
-          color: '#ffffff',
-          opacity: 0.7,
-          centerThinning: 0.2,
-          directionAzimuth: 0,
-          directionPolar: 30,
-          dropletSizeX: 3,
-          dropletSizeY: 3,
-          distortionStrength: 0.3,
-          vignette: 0.3,
-          vignetteColor: '#aaaaaa'
-        })
+        // Clear rain first if it was active
+        if (typeof mapAny.setRain === 'function') {
+          mapAny.setRain(null)
+        }
+        // Set snow with official Mapbox API
+        if (typeof mapAny.setSnow === 'function') {
+          mapAny.setSnow({
+            density: 0.85,
+            intensity: 1.0,
+            'center-thinning': 0.1,
+            direction: [0, 50],
+            opacity: 1.0,
+            color: '#ffffff',
+            'flake-size': 0.71,
+            vignette: 0.3,
+            'vignette-color': '#ffffff'
+          })
+          console.log('✅ Snow enabled')
+        }
       } else {
-        mapAny.setPrecipitation({
-          type: 'none'
-        })
+        // Clear both rain and snow
+        if (typeof mapAny.setRain === 'function') {
+          mapAny.setRain(null)
+        }
+        if (typeof mapAny.setSnow === 'function') {
+          mapAny.setSnow(null)
+        }
+        console.log('✅ Weather cleared')
       }
     } catch (error) {
-      console.log('Precipitation not supported:', error)
+      console.log('❌ Weather effects error:', error)
     }
   }, [weather])
 
