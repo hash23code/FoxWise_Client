@@ -132,17 +132,28 @@ export default function JobsMapPage() {
       let latitude = null
       let longitude = null
 
+      console.log('[JOBS-MAP] Submitting form with address:', formData.address)
+
       if (formData.address) {
+        console.log('[JOBS-MAP] Geocoding address:', formData.address)
         const geocodeRes = await fetch('/api/geocode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: formData.address })
         })
 
+        console.log('[JOBS-MAP] Geocode response status:', geocodeRes.status)
+
         if (geocodeRes.ok) {
           const geocodeData = await geocodeRes.json()
           latitude = geocodeData.latitude
           longitude = geocodeData.longitude
+          console.log('[JOBS-MAP] Geocoded successfully! Lat:', latitude, 'Lng:', longitude)
+        } else {
+          const errorData = await geocodeRes.json()
+          console.error('[JOBS-MAP] Geocoding FAILED:', errorData)
+          alert(`Erreur de géocodage: ${errorData.error}. Vérifiez l'adresse.`)
+          return
         }
       } else if (formData.client_id) {
         // Use client's location if no address provided
@@ -192,6 +203,9 @@ export default function JobsMapPage() {
         longitude
       }
 
+      console.log('[JOBS-MAP] Saving job with payload:', payload)
+      console.log('[JOBS-MAP] Coordinates - Lat:', latitude, 'Lng:', longitude)
+
       const url = selectedJob ? `/api/jobs?id=${selectedJob.id}` : '/api/jobs'
       const method = selectedJob ? 'PUT' : 'POST'
 
@@ -201,11 +215,19 @@ export default function JobsMapPage() {
         body: JSON.stringify(payload)
       })
 
+      console.log('[JOBS-MAP] Save response status:', res.status)
+
       if (res.ok) {
+        const savedJob = await res.json()
+        console.log('[JOBS-MAP] Job saved successfully:', savedJob)
+        console.log('[JOBS-MAP] Saved job has coordinates?',
+          'Lat:', savedJob.latitude,
+          'Lng:', savedJob.longitude)
         await fetchData()
         handleCloseModal()
       } else {
         const error = await res.json()
+        console.error('[JOBS-MAP] Save FAILED:', error)
         alert('Erreur: ' + (error.details || error.error || 'Erreur inconnue'))
       }
     } catch (error) {
@@ -351,9 +373,26 @@ export default function JobsMapPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">
-                {selectedJob ? 'Modifier le Job' : 'Nouveau Job'}
-              </h2>
+              <div>
+                <h2 className="text-2xl font-bold text-white">
+                  {selectedJob ? 'Modifier le Job' : 'Nouveau Job'}
+                </h2>
+                {selectedJob && (
+                  <div className="mt-2">
+                    {selectedJob.latitude && selectedJob.longitude ? (
+                      <div className="flex items-center gap-2 text-green-400 text-sm">
+                        <MapPin className="w-4 h-4" />
+                        <span>Coordonnées GPS: {selectedJob.latitude.toFixed(4)}, {selectedJob.longitude.toFixed(4)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Aucune coordonnée GPS - Entrez une adresse complète</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={handleCloseModal}
                 className="p-2 text-gray-400 hover:text-white transition-colors"
