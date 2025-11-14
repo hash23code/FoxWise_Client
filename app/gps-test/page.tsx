@@ -429,8 +429,7 @@ export default function GPSTestPage() {
         zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative'
+        justifyContent: 'center'
       }}>
         {/* Speed arc background */}
         <svg width="180" height="180" style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
@@ -505,8 +504,7 @@ export default function GPSTestPage() {
         zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative'
+        justifyContent: 'center'
       }}>
         {/* Compass background */}
         <div style={{
