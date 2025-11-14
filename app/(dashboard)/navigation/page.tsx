@@ -96,8 +96,11 @@ export default function NavigationPage() {
         setJobs(assignedJobs)
 
         if (!selectedJob && assignedJobs.length > 0) {
-          setSelectedJob(assignedJobs[0])
-          addDebug(`Selected job: ${assignedJobs[0].title}`)
+          const job = assignedJobs[0]
+          setSelectedJob(job)
+          addDebug(`Selected job: ${job.title}`)
+          addDebug(`Job has coordinates: ${job.latitude ? 'YES' : 'NO'} (lat: ${job.latitude}, lng: ${job.longitude})`)
+          addDebug(`Client address: ${job.client?.address || 'N/A'}`)
         }
       } else {
         addDebug(`Failed to fetch jobs: ${res.status}`)
@@ -451,20 +454,55 @@ export default function NavigationPage() {
           />
         ) : (
           <div className="flex items-center justify-center h-full bg-gray-950">
-            <div className="text-center px-4">
+            <div className="text-center px-4 max-w-md">
               <AlertCircle className="w-16 h-16 text-yellow-400 mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-white mb-2">Aucune destination</h2>
-              <p className="text-gray-400">
-                {selectedJob
-                  ? 'Ce job n&apos;a pas d&apos;adresse définie.'
-                  : 'Sélectionnez un job dans la liste pour commencer la navigation.'}
-              </p>
-              <button
-                onClick={() => setShowJobList(true)}
-                className="mt-4 bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-600 transition-all"
-              >
-                Voir mes jobs
-              </button>
+
+              {selectedJob ? (
+                <div className="space-y-4">
+                  <p className="text-gray-400">
+                    Le job <span className="text-white font-semibold">&quot;{selectedJob.title}&quot;</span> n&apos;a pas d&apos;adresse géolocalisée.
+                  </p>
+
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-left">
+                    <h3 className="text-blue-400 font-semibold mb-2 text-sm">💡 Solution:</h3>
+                    <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
+                      <li>Allez sur <code className="bg-black/50 px-1 py-0.5 rounded">/jobs-map</code></li>
+                      <li>Cliquez sur ce job</li>
+                      <li>Modifiez-le et ajoutez une <strong>adresse complète</strong></li>
+                      <li>Ex: &quot;123 Rue Saint-Denis, Montréal, QC H2X 3K8&quot;</li>
+                      <li>Sauvegardez - l&apos;adresse sera géocodée automatiquement!</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => window.location.href = '/jobs-map'}
+                      className="flex-1 bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-all text-sm"
+                    >
+                      Aller à Jobs Map
+                    </button>
+                    <button
+                      onClick={() => setShowJobList(true)}
+                      className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-600 transition-all text-sm"
+                    >
+                      Changer de job
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-gray-400 mb-4">
+                    Sélectionnez un job dans la liste pour commencer la navigation.
+                  </p>
+                  <button
+                    onClick={() => setShowJobList(true)}
+                    className="bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-600 transition-all"
+                  >
+                    Voir mes jobs
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
