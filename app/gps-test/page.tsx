@@ -12,6 +12,7 @@ export default function GPSTestPage() {
   const [altitude, setAltitude] = useState(0)
   const [currentPosition, setCurrentPosition] = useState<{ longitude: number; latitude: number; heading: number } | null>(null)
   const [viewMode, setViewMode] = useState<'immersive' | 'overhead'>('immersive')
+  const [followGPS, setFollowGPS] = useState(true) // Track if we should follow GPS or free roam
 
   // Initialize map ONCE
   useEffect(() => {
@@ -102,6 +103,12 @@ export default function GPSTestPage() {
       console.log('✅ Effets 3D ajoutés')
     })
 
+    // Detect manual map movement (stop GPS follow when user pans)
+    map.current.on('dragstart', () => {
+      setFollowGPS(false)
+      console.log('🖐️ Free roam mode - GPS tracking paused')
+    })
+
     // Track GPS position
     if (navigator.geolocation) {
       console.log('✅ GPS disponible')
@@ -138,32 +145,61 @@ export default function GPSTestPage() {
     }
   }, [])
 
-  // Handle view mode changes and camera updates
+  // Handle view mode changes - stay at current map center
   useEffect(() => {
-    if (!map.current || !currentPosition) return
+    if (!map.current) return
+
+    // Get current center of the map (wherever user is looking)
+    const currentCenter = map.current.getCenter()
+    const currentBearing = map.current.getBearing()
+
+    if (viewMode === 'immersive') {
+      map.current.easeTo({
+        center: [currentCenter.lng, currentCenter.lat] as [number, number],
+        zoom: 19, // Très proche
+        pitch: 85, // Maximum pitch pour effet immersif
+        bearing: currentBearing, // Keep current rotation
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    } else {
+      map.current.easeTo({
+        center: [currentCenter.lng, currentCenter.lat] as [number, number],
+        zoom: 15, // Plus éloigné
+        pitch: 0, // Vue de haut
+        bearing: 0, // North up
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    }
+  }, [viewMode])
+
+  // Update camera to follow GPS position (only if followGPS is true)
+  useEffect(() => {
+    if (!map.current || !currentPosition || !followGPS) return
 
     const { longitude, latitude, heading } = currentPosition
 
     if (viewMode === 'immersive') {
       map.current.easeTo({
         center: [longitude, latitude] as [number, number],
-        zoom: 19, // Très proche
-        pitch: 85, // Maximum pitch pour effet immersif
-        bearing: heading, // Rotation selon direction
+        zoom: 19,
+        pitch: 85,
+        bearing: heading,
         duration: 1000,
         easing: (t: number) => t
       })
     } else {
       map.current.easeTo({
         center: [longitude, latitude] as [number, number],
-        zoom: 15, // Plus éloigné
-        pitch: 0, // Vue de haut
-        bearing: 0, // Pas de rotation
+        zoom: 15,
+        pitch: 0,
+        bearing: 0,
         duration: 1000,
         easing: (t: number) => t
       })
     }
-  }, [viewMode, currentPosition])
+  }, [currentPosition, viewMode, followGPS])
 
   return (
     <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative' }}>
@@ -261,6 +297,33 @@ export default function GPSTestPage() {
             {viewMode === 'immersive' ? 'VUE DE HAUT' : 'VUE IMMERSIVE'}
           </div>
         </button>
+
+        {/* Re-center to GPS button - only show when not following GPS */}
+        {!followGPS && (
+          <button
+            onClick={() => setFollowGPS(true)}
+            style={{
+              background: 'rgba(16, 185, 129, 0.9)',
+              backdropFilter: 'blur(20px)',
+              padding: '15px 25px',
+              borderRadius: '15px',
+              border: '2px solid rgba(16, 185, 129, 0.5)',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '14px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '5px',
+              animation: 'pulse 2s infinite'
+            }}
+          >
+            <div style={{ fontSize: '24px' }}>📍</div>
+            <div>RETOUR GPS</div>
+          </button>
+        )}
       </div>
 
       {/* Status Badge - Bottom Right */}
@@ -268,11 +331,11 @@ export default function GPSTestPage() {
         position: 'absolute',
         bottom: 20,
         right: 20,
-        background: 'rgba(16, 185, 129, 0.9)',
+        background: followGPS ? 'rgba(16, 185, 129, 0.9)' : 'rgba(234, 179, 8, 0.9)',
         backdropFilter: 'blur(20px)',
         padding: '10px 20px',
         borderRadius: '15px',
-        border: '2px solid rgba(16, 185, 129, 0.5)',
+        border: followGPS ? '2px solid rgba(16, 185, 129, 0.5)' : '2px solid rgba(234, 179, 8, 0.5)',
         zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
@@ -282,12 +345,14 @@ export default function GPSTestPage() {
           width: '10px',
           height: '10px',
           borderRadius: '50%',
-          background: '#10b981',
+          background: followGPS ? '#10b981' : '#eab308',
           animation: 'pulse 2s infinite',
-          boxShadow: '0 0 10px #10b981'
+          boxShadow: followGPS ? '0 0 10px #10b981' : '0 0 10px #eab308'
         }} />
         <div style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>
-          {viewMode === 'immersive' ? '🏎️ MODE IMMERSIF' : '🗺️ VUE CARTE'}
+          {followGPS
+            ? (viewMode === 'immersive' ? '🏎️ GPS IMMERSIF' : '🗺️ GPS CARTE')
+            : '🖐️ FREE ROAM'}
         </div>
       </div>
 
