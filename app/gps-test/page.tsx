@@ -55,59 +55,104 @@ export default function GPSTestPage() {
 
       console.log('✅ Map chargée, ajout des effets 3D...')
 
-      // Add 3D buildings layer
+      // Add 3D buildings layer with enhanced lighting
       map.current.addLayer({
         id: '3d-buildings',
         source: 'composite',
         'source-layer': 'building',
         filter: ['==', 'extrude', 'true'],
         type: 'fill-extrusion',
-        minzoom: 15,
+        minzoom: 14,
         paint: {
           'fill-extrusion-color': [
             'interpolate',
             ['linear'],
             ['get', 'height'],
-            0, '#1a1a2e',
-            50, '#2d2d44',
-            100, '#3d3d5c'
+            0, '#0a0a1e',
+            20, '#1a1a3e',
+            50, '#2a2a5e',
+            100, '#3a3a7e',
+            200, '#4a4a9e'
           ],
-          'fill-extrusion-height': ['get', 'height'],
-          'fill-extrusion-base': ['get', 'min_height'],
-          'fill-extrusion-opacity': 0.8
+          'fill-extrusion-height': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            15, 0,
+            15.05, ['get', 'height']
+          ],
+          'fill-extrusion-base': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            15, 0,
+            15.05, ['get', 'min_height']
+          ],
+          'fill-extrusion-opacity': 0.9,
+          'fill-extrusion-vertical-gradient': true
         }
       })
 
-      // Add enhanced sky layer
+      // Add enhanced sky layer with dynamic lighting
       map.current.addLayer({
         id: 'sky',
         type: 'sky',
         paint: {
           'sky-type': 'atmosphere',
-          'sky-atmosphere-sun': [0.0, 90.0],
-          'sky-atmosphere-sun-intensity': 15,
-          'sky-atmosphere-halo-color': '#667eea',
-          'sky-atmosphere-color': '#1a1a2e'
+          'sky-atmosphere-sun': [0.0, 80.0],
+          'sky-atmosphere-sun-intensity': 20,
+          'sky-atmosphere-halo-color': 'rgba(102, 126, 234, 0.8)',
+          'sky-atmosphere-color': 'rgba(26, 26, 46, 0.9)',
+          'sky-gradient-center': [0, 0],
+          'sky-gradient-radius': 90,
+          'sky-opacity': [
+            'interpolate',
+            ['exponential', 0.1],
+            ['zoom'],
+            5, 0,
+            22, 1
+          ]
         }
       })
 
-      // Add fog for depth perception
+      // Add fog for ultra-depth perception
       try {
         if (typeof map.current.setFog === 'function') {
           map.current.setFog({
-            'range': [0.5, 10],
+            'range': [0.8, 8],
             'color': '#1a1a2e',
-            'horizon-blend': 0.1,
+            'horizon-blend': 0.05,
             'high-color': '#667eea',
             'space-color': '#0a0a1e',
-            'star-intensity': 0.3
+            'star-intensity': 0.5
           })
         }
       } catch (error) {
         console.log('Fog not supported')
       }
 
+      // Add ambient and directional lighting for 3D buildings
+      try {
+        if (typeof map.current.setLight === 'function') {
+          map.current.setLight({
+            anchor: 'viewport',
+            color: '#ffffff',
+            intensity: 0.4,
+            position: [1.5, 180, 80]
+          })
+        }
+      } catch (error) {
+        console.log('Lighting not supported')
+      }
+
       console.log('✅ Effets 3D ajoutés')
+
+      // Initialize precipitation (will be updated by weather state)
+      if (typeof map.current.setPrecipitation === 'function') {
+        map.current.setPrecipitation({
+          type: 'none'
+        })
+      }
 
       // Add trail source for movement trail
       map.current.addSource('trail', {
@@ -356,6 +401,49 @@ export default function GPSTestPage() {
     }
   }, [currentPosition, viewMode, followGPS])
 
+  // Update weather/precipitation effects
+  useEffect(() => {
+    if (!map.current || typeof map.current.setPrecipitation !== 'function') return
+
+    if (weather === 'rain') {
+      map.current.setPrecipitation({
+        type: 'rain',
+        density: 1,
+        intensity: 1,
+        color: '#919191',
+        opacity: 0.5,
+        centerThinning: 0,
+        directionAzimuth: 0,
+        directionPolar: 50,
+        dropletSizeX: 1,
+        dropletSizeY: 10,
+        distortionStrength: 0.5,
+        vignette: 0.5,
+        vignetteColor: '#6e6e6e'
+      })
+    } else if (weather === 'snow') {
+      map.current.setPrecipitation({
+        type: 'snow',
+        density: 0.8,
+        intensity: 1,
+        color: '#ffffff',
+        opacity: 0.7,
+        centerThinning: 0.2,
+        directionAzimuth: 0,
+        directionPolar: 30,
+        dropletSizeX: 3,
+        dropletSizeY: 3,
+        distortionStrength: 0.3,
+        vignette: 0.3,
+        vignetteColor: '#aaaaaa'
+      })
+    } else {
+      map.current.setPrecipitation({
+        type: 'none'
+      })
+    }
+  }, [weather])
+
   // Calculate session time
   const sessionTime = Math.floor((Date.now() - sessionStart) / 1000)
   const minutes = Math.floor(sessionTime / 60)
@@ -371,30 +459,6 @@ export default function GPSTestPage() {
         ref={mapContainer}
         style={{ width: '100%', height: '100%' }}
       />
-
-      {/* Weather Particles */}
-      {weather === 'rain' && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          zIndex: 998,
-          background: 'repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(255,255,255,0.1) 2px, transparent 3px)',
-          animation: 'rain 0.3s linear infinite'
-        }} />
-      )}
-
-      {weather === 'snow' && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          zIndex: 998,
-          background: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)',
-          backgroundSize: '50px 50px',
-          animation: 'snow 3s linear infinite'
-        }} />
-      )}
 
       {/* Speed Effect - Motion blur lines when moving fast */}
       {speed > 50 && (
@@ -778,24 +842,6 @@ export default function GPSTestPage() {
           50% {
             transform: scale(1.1);
             box-shadow: 0 0 30px rgba(102, 126, 234, 1), 0 0 60px rgba(102, 126, 234, 0.6);
-          }
-        }
-
-        @keyframes rain {
-          0% {
-            background-position: 0 0;
-          }
-          100% {
-            background-position: 0 100vh;
-          }
-        }
-
-        @keyframes snow {
-          0% {
-            background-position: 0 0, 25px 25px;
-          }
-          100% {
-            background-position: 0 100vh, 25px calc(100vh + 25px);
           }
         }
 
