@@ -10,8 +10,10 @@ export default function GPSTestPage() {
   const [speed, setSpeed] = useState(0)
   const [heading, setHeading] = useState(0)
   const [altitude, setAltitude] = useState(0)
+  const [currentPosition, setCurrentPosition] = useState<{ longitude: number; latitude: number; heading: number } | null>(null)
   const [viewMode, setViewMode] = useState<'immersive' | 'overhead'>('immersive')
 
+  // Initialize map ONCE
   useEffect(() => {
     // Initialize map only once
     if (map.current) return
@@ -100,7 +102,7 @@ export default function GPSTestPage() {
       console.log('✅ Effets 3D ajoutés')
     })
 
-    // Track GPS position with 3D camera follow
+    // Track GPS position
     if (navigator.geolocation) {
       console.log('✅ GPS disponible')
 
@@ -114,28 +116,8 @@ export default function GPSTestPage() {
           setHeading(gpsHeading || 0)
           setAltitude(gpsAltitude || 0)
 
-          // Smooth 3D camera follow with rotation based on heading
-          if (map.current) {
-            if (viewMode === 'immersive') {
-              map.current.easeTo({
-                center: [longitude, latitude] as [number, number],
-                zoom: 19, // Très proche
-                pitch: 85, // Maximum pitch pour effet immersif
-                bearing: gpsHeading || 0, // Rotation selon direction
-                duration: 1000,
-                easing: (t: number) => t
-              })
-            } else {
-              map.current.easeTo({
-                center: [longitude, latitude] as [number, number],
-                zoom: 15, // Plus éloigné
-                pitch: 0, // Vue de haut
-                bearing: 0, // Pas de rotation
-                duration: 1000,
-                easing: (t: number) => t
-              })
-            }
-          }
+          // Store current position
+          setCurrentPosition({ longitude, latitude, heading: gpsHeading || 0 })
         },
         (error) => {
           console.error('❌ GPS error:', error.message)
@@ -154,7 +136,34 @@ export default function GPSTestPage() {
     return () => {
       map.current?.remove()
     }
-  }, [viewMode])
+  }, [])
+
+  // Handle view mode changes and camera updates
+  useEffect(() => {
+    if (!map.current || !currentPosition) return
+
+    const { longitude, latitude, heading } = currentPosition
+
+    if (viewMode === 'immersive') {
+      map.current.easeTo({
+        center: [longitude, latitude] as [number, number],
+        zoom: 19, // Très proche
+        pitch: 85, // Maximum pitch pour effet immersif
+        bearing: heading, // Rotation selon direction
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    } else {
+      map.current.easeTo({
+        center: [longitude, latitude] as [number, number],
+        zoom: 15, // Plus éloigné
+        pitch: 0, // Vue de haut
+        bearing: 0, // Pas de rotation
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    }
+  }, [viewMode, currentPosition])
 
   return (
     <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative' }}>
