@@ -37,18 +37,23 @@ export default function NavigationMap({
   useEffect(() => {
     if (!mapContainer.current || map.current) return
 
-    mapboxgl.accessToken = apiKey
+    try {
+      mapboxgl.accessToken = apiKey
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/navigation-night-v1',
-      center: [-73.5673, 45.5017],
-      zoom: 17,
-      pitch: 75, // Plus incliné pour effet immersif
-      bearing: 0,
-      antialias: true,
-      attributionControl: false // Enlever l'attribution pour plus d'espace
-    })
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/navigation-night-v1',
+        center: [-73.5673, 45.5017],
+        zoom: 17,
+        pitch: 75, // Plus incliné pour effet immersif
+        bearing: 0,
+        antialias: true,
+        attributionControl: false // Enlever l'attribution pour plus d'espace
+      })
+    } catch (error) {
+      console.error('Map initialization error:', error)
+      return
+    }
 
     map.current.on('load', () => {
       if (!map.current) return
@@ -89,15 +94,21 @@ export default function NavigationMap({
         }
       })
 
-      // Add fog for depth
-      map.current!.setFog({
-        'range': [1, 20],
-        'color': '#1a1a2e',
-        'horizon-blend': 0.1,
-        'high-color': '#667eea',
-        'space-color': '#0a0a1e',
-        'star-intensity': 0.5
-      })
+      // Add fog for depth (optional - may not be supported on all devices)
+      try {
+        if (map.current && typeof map.current.setFog === 'function') {
+          map.current.setFog({
+            'range': [1, 20],
+            'color': '#1a1a2e',
+            'horizon-blend': 0.1,
+            'high-color': '#667eea',
+            'space-color': '#0a0a1e',
+            'star-intensity': 0.5
+          })
+        }
+      } catch (error) {
+        console.log('Fog not supported on this device')
+      }
     })
 
     return () => {

@@ -17,30 +17,42 @@ export default function NavigationPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
 
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || ''
-    setMapboxApiKey(apiKey)
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || ''
+      setMapboxApiKey(apiKey)
 
-    fetchJobs()
+      fetchJobs()
 
-    if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const lat = position.coords.latitude
-          const lng = position.coords.longitude
-          setUserLocation({ lat, lng })
+      if (navigator.geolocation) {
+        const watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const lat = position.coords.latitude
+            const lng = position.coords.longitude
+            setUserLocation({ lat, lng })
 
-          updateEmployeeLocation(lat, lng, position.coords.heading || 0, position.coords.speed || 0)
-          checkProximity(lat, lng)
-        },
-        (error) => console.error('Geolocation error:', error),
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 5000
+            updateEmployeeLocation(lat, lng, position.coords.heading || 0, position.coords.speed || 0)
+            checkProximity(lat, lng)
+          },
+          (error) => {
+            console.error('Geolocation error:', error)
+            setLoading(false)
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 5000
+          }
+        )
+
+        return () => {
+          if (watchId) navigator.geolocation.clearWatch(watchId)
         }
-      )
-
-      return () => navigator.geolocation.clearWatch(watchId)
+      } else {
+        setLoading(false)
+      }
+    } catch (error) {
+      console.error('Initialization error:', error)
+      setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
