@@ -116,25 +116,25 @@ export default function GPSTestPage() {
 
           // Smooth 3D camera follow with rotation based on heading
           if (map.current) {
-            const cameraSettings = viewMode === 'immersive'
-              ? {
-                  center: [longitude, latitude],
-                  zoom: 19, // Très proche
-                  pitch: 85, // Maximum pitch pour effet immersif
-                  bearing: gpsHeading || 0, // Rotation selon direction
-                  duration: 1000,
-                  easing: (t: number) => t
-                }
-              : {
-                  center: [longitude, latitude],
-                  zoom: 15, // Plus éloigné
-                  pitch: 0, // Vue de haut
-                  bearing: 0, // Pas de rotation
-                  duration: 1000,
-                  easing: (t: number) => t
-                }
-
-            map.current.easeTo(cameraSettings)
+            if (viewMode === 'immersive') {
+              map.current.easeTo({
+                center: [longitude, latitude] as [number, number],
+                zoom: 19, // Très proche
+                pitch: 85, // Maximum pitch pour effet immersif
+                bearing: gpsHeading || 0, // Rotation selon direction
+                duration: 1000,
+                easing: (t: number) => t
+              })
+            } else {
+              map.current.easeTo({
+                center: [longitude, latitude] as [number, number],
+                zoom: 15, // Plus éloigné
+                pitch: 0, // Vue de haut
+                bearing: 0, // Pas de rotation
+                duration: 1000,
+                easing: (t: number) => t
+              })
+            }
           }
         },
         (error) => {
