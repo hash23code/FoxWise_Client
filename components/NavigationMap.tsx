@@ -7,17 +7,19 @@ import { Navigation, Zap, MapPin, CloudRain, CloudSnow, Sun, Droplets } from 'lu
 import type { Job } from '@/types'
 
 interface NavigationMapProps {
-  destination: Job
+  destination: Job | null
   apiKey: string
   onArrival?: () => void
   onLocationUpdate?: (lat: number, lng: number, heading: number, speed: number) => void
+  freeRideMode?: boolean
 }
 
 export default function NavigationMap({
   destination,
   apiKey,
   onArrival,
-  onLocationUpdate
+  onLocationUpdate,
+  freeRideMode = false
 }: NavigationMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
@@ -155,8 +157,8 @@ export default function NavigationMap({
           onLocationUpdate(lat, lng, newHeading, newSpeed)
         }
 
-        // Check arrival
-        if (destination.latitude && destination.longitude) {
+        // Check arrival (only if not in free ride mode and destination exists)
+        if (!freeRideMode && destination && destination.latitude && destination.longitude) {
           const dist = calculateDistance(lat, lng, destination.latitude, destination.longitude)
           setDistance(dist)
 
@@ -183,13 +185,13 @@ export default function NavigationMap({
     }
   }, [destination, arrived, onArrival, onLocationUpdate])
 
-  // Fetch and draw route with enhanced styling
+  // Fetch and draw route with enhanced styling (only if not in free ride mode)
   useEffect(() => {
-    if (!map.current || !userLocation || !destination.latitude || !destination.longitude) return
+    if (freeRideMode || !map.current || !userLocation || !destination || !destination.latitude || !destination.longitude) return
 
     fetchRoute(userLocation.lng, userLocation.lat, destination.longitude, destination.latitude)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLocation, destination])
+  }, [userLocation, destination, freeRideMode])
 
   const fetchRoute = async (startLng: number, startLat: number, endLng: number, endLat: number) => {
     try {
@@ -373,15 +375,26 @@ export default function NavigationMap({
             {/* Destination header - Ultra compact */}
             <div className="px-3 py-2 border-b border-white/10">
               <div className="flex items-center gap-2">
-                <MapPin className={`w-4 h-4 md:w-5 md:h-5 flex-shrink-0 ${destination.is_urgent ? 'text-red-400 animate-pulse' : 'text-green-400'}`} />
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-white font-bold text-sm md:text-base truncate">{destination.title}</h2>
-                </div>
-                {destination.is_urgent && (
-                  <span className="bg-red-500 text-white px-2 py-0.5 rounded text-xs font-bold animate-pulse flex-shrink-0">
-                    URGENT
-                  </span>
-                )}
+                {freeRideMode ? (
+                  <>
+                    <Navigation className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0 text-blue-400" />
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-white font-bold text-sm md:text-base truncate">Mode Exploration 3D</h2>
+                    </div>
+                  </>
+                ) : destination ? (
+                  <>
+                    <MapPin className={`w-4 h-4 md:w-5 md:h-5 flex-shrink-0 ${destination.is_urgent ? 'text-red-400 animate-pulse' : 'text-green-400'}`} />
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-white font-bold text-sm md:text-base truncate">{destination.title}</h2>
+                    </div>
+                    {destination.is_urgent && (
+                      <span className="bg-red-500 text-white px-2 py-0.5 rounded text-xs font-bold animate-pulse flex-shrink-0">
+                        URGENT
+                      </span>
+                    )}
+                  </>
+                ) : null}
               </div>
             </div>
 
@@ -390,13 +403,13 @@ export default function NavigationMap({
               <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
                 <div className="text-xs text-gray-400">Distance</div>
                 <div className="text-white font-bold text-sm md:text-base">
-                  {distance !== null ? formatDistance(distance) : '---'}
+                  {freeRideMode ? '--' : (distance !== null ? formatDistance(distance) : '---')}
                 </div>
               </div>
               <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
                 <div className="text-xs text-gray-400">Temps</div>
                 <div className="text-white font-bold text-sm md:text-base">
-                  {duration !== null ? formatDuration(duration) : '---'}
+                  {freeRideMode ? '--' : (duration !== null ? formatDuration(duration) : '---')}
                 </div>
               </div>
               <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
@@ -411,7 +424,7 @@ export default function NavigationMap({
         </div>
 
         {/* Current instruction - Bottom, more visible */}
-        {currentInstruction && !arrived && (
+        {!freeRideMode && currentInstruction && !arrived && (
           <div className="absolute bottom-20 md:bottom-24 left-2 right-2 md:left-4 md:right-4 pointer-events-auto">
             <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl p-3 md:p-4 border-2 border-blue-300 shadow-2xl">
               <div className="flex items-center gap-3">
@@ -427,8 +440,23 @@ export default function NavigationMap({
           </div>
         )}
 
+        {/* Free ride mode message */}
+        {freeRideMode && (
+          <div className="absolute bottom-20 md:bottom-24 left-2 right-2 md:left-4 md:right-4 pointer-events-auto">
+            <div className="bg-gradient-to-r from-blue-600/80 to-purple-600/80 text-white rounded-2xl p-3 md:p-4 border border-blue-300/50 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <Navigation className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm md:text-base leading-tight">Mode Exploration</div>
+                  <div className="text-xs md:text-sm opacity-90 mt-1">En attente de nouvelles missions...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Arrival notification */}
-        {arrived && (
+        {!freeRideMode && arrived && destination && (
           <div className="absolute bottom-20 md:bottom-24 left-2 right-2 md:left-4 md:right-4 pointer-events-auto">
             <div className="bg-gradient-to-r from-green-600 to-green-500 text-white rounded-2xl p-4 border-2 border-green-300 shadow-2xl animate-pulse">
               <div className="flex items-center gap-3">
