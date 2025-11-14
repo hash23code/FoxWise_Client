@@ -37,11 +37,23 @@ export default function NavigationMap({
 
   // Initialize map with ULTRA graphics
   useEffect(() => {
-    if (!mapContainer.current || map.current) return
+    console.log('[NavigationMap] Initializing...')
+    console.log('[NavigationMap] mapContainer.current:', mapContainer.current ? 'Present' : 'NULL')
+    console.log('[NavigationMap] map.current:', map.current ? 'Already exists' : 'NULL')
+    console.log('[NavigationMap] apiKey:', apiKey ? 'Present' : 'Missing')
+    console.log('[NavigationMap] freeRideMode:', freeRideMode)
+    console.log('[NavigationMap] destination:', destination)
+
+    if (!mapContainer.current || map.current) {
+      console.log('[NavigationMap] Skipping initialization - container or map issue')
+      return
+    }
 
     try {
+      console.log('[NavigationMap] Setting Mapbox access token...')
       mapboxgl.accessToken = apiKey
 
+      console.log('[NavigationMap] Creating Mapbox Map instance...')
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/navigation-night-v1',
@@ -52,14 +64,17 @@ export default function NavigationMap({
         antialias: true,
         attributionControl: false // Enlever l'attribution pour plus d'espace
       })
+      console.log('[NavigationMap] Map instance created successfully!')
     } catch (error) {
-      console.error('Map initialization error:', error)
+      console.error('[NavigationMap] Map initialization error:', error)
       return
     }
 
     map.current.on('load', () => {
+      console.log('[NavigationMap] Map loaded event fired!')
       if (!map.current) return
 
+      console.log('[NavigationMap] Adding 3D buildings layer...')
       // Add 3D buildings with better styling
       map.current.addLayer({
         id: '3d-buildings',
@@ -127,11 +142,14 @@ export default function NavigationMap({
 
   // Start GPS tracking with high precision
   useEffect(() => {
+    console.log('[NavigationMap] Setting up GPS tracking...')
     if (!navigator.geolocation) {
+      console.error('[NavigationMap] Geolocation NOT supported!')
       alert('Geolocation non supportée')
       return
     }
 
+    console.log('[NavigationMap] Starting watchPosition...')
     watchId.current = navigator.geolocation.watchPosition(
       (position) => {
         const lat = position.coords.latitude
