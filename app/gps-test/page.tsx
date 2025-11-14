@@ -10,6 +10,7 @@ export default function GPSTestPage() {
   const [speed, setSpeed] = useState(0)
   const [heading, setHeading] = useState(0)
   const [altitude, setAltitude] = useState(0)
+  const [viewMode, setViewMode] = useState<'immersive' | 'overhead'>('immersive')
 
   useEffect(() => {
     // Initialize map only once
@@ -115,14 +116,25 @@ export default function GPSTestPage() {
 
           // Smooth 3D camera follow with rotation based on heading
           if (map.current) {
-            map.current.easeTo({
-              center: [longitude, latitude],
-              zoom: 18,
-              pitch: 70,
-              bearing: gpsHeading || 0, // Rotate map to match heading
-              duration: 1000,
-              easing: (t) => t // Linear easing for smooth follow
-            })
+            const cameraSettings = viewMode === 'immersive'
+              ? {
+                  center: [longitude, latitude],
+                  zoom: 19, // Très proche
+                  pitch: 85, // Maximum pitch pour effet immersif
+                  bearing: gpsHeading || 0, // Rotation selon direction
+                  duration: 1000,
+                  easing: (t: number) => t
+                }
+              : {
+                  center: [longitude, latitude],
+                  zoom: 15, // Plus éloigné
+                  pitch: 0, // Vue de haut
+                  bearing: 0, // Pas de rotation
+                  duration: 1000,
+                  easing: (t: number) => t
+                }
+
+            map.current.easeTo(cameraSettings)
           }
         },
         (error) => {
@@ -142,7 +154,7 @@ export default function GPSTestPage() {
     return () => {
       map.current?.remove()
     }
-  }, [])
+  }, [viewMode])
 
   return (
     <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative' }}>
@@ -204,6 +216,44 @@ export default function GPSTestPage() {
         </div>
       </div>
 
+      {/* View Mode Toggle - Top Right */}
+      <div style={{
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}>
+        <button
+          onClick={() => setViewMode(viewMode === 'immersive' ? 'overhead' : 'immersive')}
+          style={{
+            background: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(20px)',
+            padding: '15px 25px',
+            borderRadius: '15px',
+            border: '2px solid rgba(255, 255, 255, 0.2)',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          <div style={{ fontSize: '24px' }}>
+            {viewMode === 'immersive' ? '🚁' : '🏎️'}
+          </div>
+          <div>
+            {viewMode === 'immersive' ? 'VUE DE HAUT' : 'VUE IMMERSIVE'}
+          </div>
+        </button>
+      </div>
+
       {/* Status Badge - Bottom Right */}
       <div style={{
         position: 'absolute',
@@ -228,7 +278,7 @@ export default function GPSTestPage() {
           boxShadow: '0 0 10px #10b981'
         }} />
         <div style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>
-          NAVIGATION 3D ACTIVE
+          {viewMode === 'immersive' ? '🏎️ MODE IMMERSIF' : '🗺️ VUE CARTE'}
         </div>
       </div>
 
