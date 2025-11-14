@@ -148,10 +148,10 @@ export default function GPSTestPage() {
       console.log('✅ Effets 3D ajoutés')
 
       // Initialize precipitation (will be updated by weather state)
-      if (typeof map.current.setPrecipitation === 'function') {
-        map.current.setPrecipitation({
-          type: 'none'
-        })
+      try {
+        (map.current as any).setPrecipitation({ type: 'none' })
+      } catch (error) {
+        console.log('Precipitation not supported')
       }
 
       // Add trail source for movement trail
@@ -403,44 +403,50 @@ export default function GPSTestPage() {
 
   // Update weather/precipitation effects
   useEffect(() => {
-    if (!map.current || typeof map.current.setPrecipitation !== 'function') return
+    if (!map.current) return
 
-    if (weather === 'rain') {
-      map.current.setPrecipitation({
-        type: 'rain',
-        density: 1,
-        intensity: 1,
-        color: '#919191',
-        opacity: 0.5,
-        centerThinning: 0,
-        directionAzimuth: 0,
-        directionPolar: 50,
-        dropletSizeX: 1,
-        dropletSizeY: 10,
-        distortionStrength: 0.5,
-        vignette: 0.5,
-        vignetteColor: '#6e6e6e'
-      })
-    } else if (weather === 'snow') {
-      map.current.setPrecipitation({
-        type: 'snow',
-        density: 0.8,
-        intensity: 1,
-        color: '#ffffff',
-        opacity: 0.7,
-        centerThinning: 0.2,
-        directionAzimuth: 0,
-        directionPolar: 30,
-        dropletSizeX: 3,
-        dropletSizeY: 3,
-        distortionStrength: 0.3,
-        vignette: 0.3,
-        vignetteColor: '#aaaaaa'
-      })
-    } else {
-      map.current.setPrecipitation({
-        type: 'none'
-      })
+    try {
+      const mapAny = map.current as any
+
+      if (weather === 'rain') {
+        mapAny.setPrecipitation({
+          type: 'rain',
+          density: 1,
+          intensity: 1,
+          color: '#919191',
+          opacity: 0.5,
+          centerThinning: 0,
+          directionAzimuth: 0,
+          directionPolar: 50,
+          dropletSizeX: 1,
+          dropletSizeY: 10,
+          distortionStrength: 0.5,
+          vignette: 0.5,
+          vignetteColor: '#6e6e6e'
+        })
+      } else if (weather === 'snow') {
+        mapAny.setPrecipitation({
+          type: 'snow',
+          density: 0.8,
+          intensity: 1,
+          color: '#ffffff',
+          opacity: 0.7,
+          centerThinning: 0.2,
+          directionAzimuth: 0,
+          directionPolar: 30,
+          dropletSizeX: 3,
+          dropletSizeY: 3,
+          distortionStrength: 0.3,
+          vignette: 0.3,
+          vignetteColor: '#aaaaaa'
+        })
+      } else {
+        mapAny.setPrecipitation({
+          type: 'none'
+        })
+      }
+    } catch (error) {
+      console.log('Precipitation not supported:', error)
     }
   }, [weather])
 
