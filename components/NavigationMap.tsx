@@ -117,8 +117,9 @@ export default function NavigationMap({
       if (watchId.current !== null) {
         navigator.geolocation.clearWatch(watchId.current)
       }
-      if (animationFrame.current !== null) {
-        cancelAnimationFrame(animationFrame.current)
+      const frameId = animationFrame.current
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId)
       }
       map.current?.remove()
     }
@@ -183,6 +184,7 @@ export default function NavigationMap({
         navigator.geolocation.clearWatch(watchId.current)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destination, arrived, onArrival, onLocationUpdate])
 
   // Fetch and draw route with enhanced styling (only if not in free ride mode)
@@ -297,7 +299,7 @@ export default function NavigationMap({
               source: 'destination',
               paint: {
                 'circle-radius': 30,
-                'circle-color': destination.is_urgent ? '#ef4444' : '#10b981',
+                'circle-color': destination?.is_urgent ? '#ef4444' : '#10b981',
                 'circle-opacity': 0.3,
                 'circle-blur': 1
               }
@@ -309,7 +311,7 @@ export default function NavigationMap({
               source: 'destination',
               paint: {
                 'circle-radius': 18,
-                'circle-color': destination.is_urgent ? '#ef4444' : '#10b981',
+                'circle-color': destination?.is_urgent ? '#ef4444' : '#10b981',
                 'circle-stroke-width': 4,
                 'circle-stroke-color': '#ffffff',
                 'circle-opacity': 1
