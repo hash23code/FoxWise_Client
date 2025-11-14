@@ -5,53 +5,78 @@ import dynamic from 'next/dynamic'
 import { MapPin, List, AlertCircle, CheckCircle, Clock, X, ChevronRight } from 'lucide-react'
 import type { Job } from '@/types'
 
-// Import NavigationMap dynamically to avoid SSR issues
-const NavigationMap = dynamic(() => import('@/components/NavigationMap'), { ssr: false })
+const NavigationMap = dynamic(() => import('@/components/NavigationMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-gray-950">
+      <div className="text-white text-xl">Chargement de la carte...</div>
+    </div>
+  )
+})
 
 export default function NavigationPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>('')
   const [mapboxApiKey, setMapboxApiKey] = useState('')
-  const [showJobList, setShowJobList] = useState(false) // Changé à false par défaut (menu burger)
+  const [showJobList, setShowJobList] = useState(false)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string[]>([])
+
+  const addDebug = (msg: string) => {
+    console.log('[Navigation]', msg)
+    setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`])
+  }
 
   useEffect(() => {
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || ''
-      setMapboxApiKey(apiKey)
+    addDebug('Starting initialization...')
 
-      fetchJobs()
+    const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || ''
+    addDebug(`API Key: ${apiKey ? 'Present' : 'Missing'}`)
+    setMapboxApiKey(apiKey)
 
-      if (navigator.geolocation) {
-        const watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            const lat = position.coords.latitude
-            const lng = position.coords.longitude
-            setUserLocation({ lat, lng })
+    if (!apiKey) {
+      setError('Clé API Mapbox manquante')
+      setLoading(false)
+      return
+    }
 
-            updateEmployeeLocation(lat, lng, position.coords.heading || 0, position.coords.speed || 0)
-            checkProximity(lat, lng)
-          },
-          (error) => {
-            console.error('Geolocation error:', error)
-            setLoading(false)
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 5000
-          }
-        )
+    fetchJobs()
 
-        return () => {
-          if (watchId) navigator.geolocation.clearWatch(watchId)
+    if (navigator.geolocation) {
+      addDebug('Geolocation available, requesting permission...')
+
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          addDebug(`Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+          setUserLocation({ lat, lng })
+          updateEmployeeLocation(lat, lng, position.coords.heading || 0, position.coords.speed || 0)
+          checkProximity(lat, lng)
+        },
+        (error) => {
+          addDebug(`Geolocation error: ${error.message}`)
+          setError(`Erreur de géolocalisation: ${error.message}`)
+          setLoading(false)
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000
         }
-      } else {
-        setLoading(false)
+      )
+
+      return () => {
+        if (watchId) {
+          addDebug('Cleaning up geolocation watch')
+          navigator.geolocation.clearWatch(watchId)
+        }
       }
-    } catch (error) {
-      console.error('Initialization error:', error)
+    } else {
+      addDebug('Geolocation NOT available')
+      setError('Géolocalisation non disponible sur cet appareil')
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,19 +84,26 @@ export default function NavigationPage() {
 
   const fetchJobs = async () => {
     try {
+      addDebug('Fetching jobs...')
       const res = await fetch('/api/jobs')
       if (res.ok) {
         const data = await res.json()
+        addDebug(`Received ${data.length} jobs`)
         const assignedJobs = data.filter(
           (job: Job) => job.assigned_to && job.status !== 'cancelled' && job.status !== 'completed'
         )
+        addDebug(`${assignedJobs.length} assigned jobs`)
         setJobs(assignedJobs)
 
         if (!selectedJob && assignedJobs.length > 0) {
           setSelectedJob(assignedJobs[0])
+          addDebug(`Selected job: ${assignedJobs[0].title}`)
         }
+      } else {
+        addDebug(`Failed to fetch jobs: ${res.status}`)
       }
-    } catch (error) {
+    } catch (error: any) {
+      addDebug(`Error fetching jobs: ${error.message}`)
       console.error('Error fetching jobs:', error)
     } finally {
       setLoading(false)
@@ -111,6 +143,7 @@ export default function NavigationPage() {
       if (res.ok) {
         const data = await res.json()
         if (data.updated > 0) {
+          addDebug(`${data.updated} jobs updated (proximity)`)
           await fetchJobs()
         }
       }
@@ -158,7 +191,6 @@ export default function NavigationPage() {
         setSelectedJob(null)
       }
 
-      // Fermer le menu après avoir complété
       setShowJobList(false)
     } catch (error) {
       console.error('Error completing job:', error)
@@ -166,8 +198,9 @@ export default function NavigationPage() {
   }
 
   const handleSelectJob = (job: Job) => {
+    addDebug(`Job selected: ${job.title}`)
     setSelectedJob(job)
-    setShowJobList(false) // Fermer le menu après sélection
+    setShowJobList(false)
   }
 
   const getStatusColor = (status: string) => {
@@ -195,10 +228,55 @@ export default function NavigationPage() {
     return labels[status] || status
   }
 
+  // Debug panel toggle
+  const [showDebug, setShowDebug] = useState(false)
+
   if (loading) {
     return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-950 p-4">
+        <div className="text-white text-xl mb-4">Chargement de la navigation...</div>
+        <div className="text-gray-400 text-sm">{debugInfo[debugInfo.length - 1]}</div>
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="mt-4 text-xs text-gray-500 hover:text-gray-300"
+        >
+          {showDebug ? 'Masquer' : 'Afficher'} les détails
+        </button>
+        {showDebug && (
+          <div className="mt-4 bg-black/50 p-4 rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="text-xs font-mono text-green-400 space-y-1">
+              {debugInfo.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
       <div className="flex items-center justify-center h-full bg-gray-950">
-        <div className="text-white text-xl">Chargement de la navigation...</div>
+        <div className="bg-red-500/20 border border-red-500 rounded-xl p-6 max-w-md mx-4">
+          <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Erreur</h2>
+          <p className="text-gray-300 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600"
+          >
+            Réessayer
+          </button>
+          <details className="mt-4">
+            <summary className="text-xs text-gray-400 cursor-pointer">Logs de débogage</summary>
+            <div className="mt-2 bg-black/50 p-2 rounded text-xs font-mono text-green-400 max-h-40 overflow-y-auto">
+              {debugInfo.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+            </div>
+          </details>
+        </div>
       </div>
     )
   }
@@ -210,7 +288,7 @@ export default function NavigationPage() {
           <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
           <h2 className="text-xl font-bold text-white mb-2">Clé API Mapbox manquante</h2>
           <p className="text-gray-300 text-sm">
-            Veuillez ajouter votre clé API Mapbox dans le fichier <code className="bg-black/50 px-2 py-1 rounded text-xs">.env.local</code>
+            Veuillez ajouter votre clé API Mapbox dans les variables d&apos;environnement Vercel
           </p>
         </div>
       </div>
@@ -232,8 +310,26 @@ export default function NavigationPage() {
   }
 
   return (
-    <div className="h-full flex relative overflow-hidden">
-      {/* Burger Menu Button - Always visible */}
+    <div className="h-full flex relative overflow-hidden bg-gray-950">
+      {/* Debug button */}
+      <button
+        onClick={() => setShowDebug(!showDebug)}
+        className="absolute top-4 right-4 z-50 bg-black/80 text-white px-2 py-1 rounded text-xs"
+      >
+        Debug
+      </button>
+
+      {showDebug && (
+        <div className="absolute top-16 right-4 z-50 bg-black/90 p-4 rounded-lg max-w-md max-h-96 overflow-y-auto">
+          <div className="text-xs font-mono text-green-400 space-y-1">
+            {debugInfo.map((msg, i) => (
+              <div key={i}>{msg}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Burger Menu Button */}
       <button
         onClick={() => setShowJobList(!showJobList)}
         className="absolute top-4 left-4 z-50 bg-black/80 backdrop-blur-xl text-white p-3 rounded-xl border border-white/20 hover:bg-black/90 transition-all shadow-2xl"
@@ -242,7 +338,7 @@ export default function NavigationPage() {
         {showJobList ? <X className="w-6 h-6" /> : <List className="w-6 h-6" />}
       </button>
 
-      {/* Job List Sidebar - Slide from left on mobile */}
+      {/* Job List Sidebar */}
       <div
         className={`
           fixed inset-y-0 left-0 z-40 w-full sm:w-96
@@ -252,7 +348,6 @@ export default function NavigationPage() {
         `}
       >
         <div className="flex flex-col h-full">
-          {/* Header */}
           <div className="p-4 border-b border-gray-800 bg-gray-900/50">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold text-white">Mes Jobs</h2>
@@ -266,7 +361,6 @@ export default function NavigationPage() {
             <p className="text-gray-400 text-sm">{jobs.length} job{jobs.length > 1 ? 's' : ''} assigné{jobs.length > 1 ? 's' : ''}</p>
           </div>
 
-          {/* Job List */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {jobs.map((job, index) => (
               <button
@@ -339,7 +433,6 @@ export default function NavigationPage() {
         </div>
       </div>
 
-      {/* Overlay for mobile when menu is open */}
       {showJobList && (
         <div
           className="fixed inset-0 bg-black/50 z-30 sm:hidden"
@@ -347,7 +440,7 @@ export default function NavigationPage() {
         />
       )}
 
-      {/* Map Container - Full screen */}
+      {/* Map Container */}
       <div className="flex-1 relative">
         {selectedJob && selectedJob.latitude && selectedJob.longitude ? (
           <NavigationMap
