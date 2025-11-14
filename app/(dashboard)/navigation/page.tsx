@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { MapPin, List, AlertCircle, CheckCircle, Clock, X, ChevronRight } from 'lucide-react'
 import type { Job } from '@/types'
@@ -145,7 +145,7 @@ export default function NavigationPage() {
     }
   }
 
-  const updateEmployeeLocation = async (lat: number, lng: number, heading: number, speed: number) => {
+  const updateEmployeeLocation = useCallback(async (lat: number, lng: number, heading: number, speed: number) => {
     try {
       await fetch('/api/geolocation', {
         method: 'POST',
@@ -161,7 +161,7 @@ export default function NavigationPage() {
     } catch (error) {
       console.error('Error updating location:', error)
     }
-  }
+  }, [])
 
   const checkProximity = async (lat: number, lng: number) => {
     try {
@@ -187,7 +187,7 @@ export default function NavigationPage() {
     }
   }
 
-  const handleArrival = async () => {
+  const handleArrival = useCallback(async () => {
     if (!selectedJob) return
 
     try {
@@ -204,7 +204,8 @@ export default function NavigationPage() {
     } catch (error) {
       console.error('Error marking arrival:', error)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJob])
 
   const handleComplete = async (jobId: string) => {
     try {
