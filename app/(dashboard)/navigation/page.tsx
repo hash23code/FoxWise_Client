@@ -57,14 +57,15 @@ export default function NavigationPage() {
           checkProximity(lat, lng)
         },
         (error) => {
-          addDebug(`Geolocation error: ${error.message}`)
-          setError(`Erreur de géolocalisation: ${error.message}`)
-          setLoading(false)
+          // Don't block the app if geolocation times out - just log it
+          addDebug(`Geolocation warning: ${error.message} (code: ${error.code})`)
+          console.warn('Geolocation error (non-blocking):', error)
+          // Don't set error state or stop loading - continue anyway
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 10000
+          maximumAge: 10000, // Allow 10s old positions
+          timeout: 30000 // Increase timeout to 30s
         }
       )
 
@@ -75,9 +76,8 @@ export default function NavigationPage() {
         }
       }
     } else {
-      addDebug('Geolocation NOT available')
-      setError('Géolocalisation non disponible sur cet appareil')
-      setLoading(false)
+      addDebug('Geolocation NOT available - continuing without GPS')
+      // Don't block the app - just continue without GPS
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
