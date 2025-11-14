@@ -116,7 +116,7 @@ export default function NavigationMapSimple({ apiKey }: NavigationMapSimpleProps
   }, [initialized])
 
   return (
-    <div className="relative w-full h-full">
+    <div className="absolute inset-0">
       <div ref={mapContainer} className="w-full h-full" />
 
       {/* Simple HUD */}
