@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { MapPin, List, AlertCircle, CheckCircle, Clock, X, ChevronRight } from 'lucide-react'
 import type { Job } from '@/types'
 
-const NavigationMap = dynamic(() => import('@/components/NavigationMap'), {
+const NavigationMap = dynamic(() => import('@/components/NavigationMapSimple'), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-full bg-gray-950">
@@ -462,15 +462,9 @@ export default function NavigationPage() {
         />
       )}
 
-      {/* Map Container - Always shown (free ride mode if no destination) */}
+      {/* Map Container - Simple version for testing */}
       <div className="flex-1 relative">
-        <NavigationMap
-          destination={selectedJob && selectedJob.latitude && selectedJob.longitude ? selectedJob : null}
-          apiKey={mapboxApiKey}
-          onArrival={handleArrival}
-          onLocationUpdate={updateEmployeeLocation}
-          freeRideMode={freeRideMode}
-        />
+        <NavigationMap apiKey={mapboxApiKey} />
       </div>
 
       {/* New Job Notification */}
