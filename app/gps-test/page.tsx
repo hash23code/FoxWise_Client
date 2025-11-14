@@ -7,12 +7,19 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 export default function GPSTestPage() {
   const mapContainer = useRef<HTMLDivElement | null>(null)
   const map = useRef<mapboxgl.Map | null>(null)
+  const userMarker = useRef<mapboxgl.Marker | null>(null)
   const [speed, setSpeed] = useState(0)
   const [heading, setHeading] = useState(0)
   const [altitude, setAltitude] = useState(0)
   const [currentPosition, setCurrentPosition] = useState<{ longitude: number; latitude: number; heading: number } | null>(null)
   const [viewMode, setViewMode] = useState<'immersive' | 'overhead'>('immersive')
   const [followGPS, setFollowGPS] = useState(true) // Track if we should follow GPS or free roam
+  const [distanceTraveled, setDistanceTraveled] = useState(0)
+  const [sessionStart] = useState(Date.now())
+  const [maxSpeed, setMaxSpeed] = useState(0)
+  const lastPosition = useRef<{ lng: number; lat: number } | null>(null)
+  const trail = useRef<Array<[number, number]>>([])
+  const [weather, setWeather] = useState<'clear' | 'rain' | 'snow'>('clear')
 
   // Initialize map ONCE
   useEffect(() => {
@@ -101,6 +108,75 @@ export default function GPSTestPage() {
       }
 
       console.log('✅ Effets 3D ajoutés')
+
+      // Add trail source for movement trail
+      map.current.addSource('trail', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      })
+
+      // Add trail layer with gradient effect
+      map.current.addLayer({
+        id: 'trail-line',
+        type: 'line',
+        source: 'trail',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': [
+            'interpolate',
+            ['linear'],
+            ['line-progress'],
+            0, '#667eea',
+            0.5, '#10b981',
+            1, '#f59e0b'
+          ],
+          'line-width': 6,
+          'line-opacity': 0.8,
+          'line-gradient': [
+            'interpolate',
+            ['linear'],
+            ['line-progress'],
+            0, 'rgba(102, 126, 234, 0.2)',
+            0.5, 'rgba(16, 185, 129, 0.6)',
+            1, 'rgba(245, 158, 11, 1)'
+          ]
+        }
+      })
+
+      // Add pulsing circle around user position
+      map.current.addSource('user-pulse', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'Point',
+            coordinates: [-73.5673, 45.5017]
+          }
+        }
+      })
+
+      map.current.addLayer({
+        id: 'user-pulse-layer',
+        type: 'circle',
+        source: 'user-pulse',
+        paint: {
+          'circle-radius': 30,
+          'circle-color': '#10b981',
+          'circle-opacity': 0.3,
+          'circle-blur': 0.8
+        }
+      })
     })
 
     // Detect manual map movement (stop GPS follow when user pans)
@@ -108,6 +184,29 @@ export default function GPSTestPage() {
       setFollowGPS(false)
       console.log('🖐️ Free roam mode - GPS tracking paused')
     })
+
+    // Create custom marker for user position
+    const el = document.createElement('div')
+    el.className = 'user-marker'
+    el.style.cssText = `
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: 4px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 40px rgba(102, 126, 234, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      animation: userPulse 2s infinite;
+      cursor: pointer;
+    `
+    el.innerHTML = '🏎️'
+
+    userMarker.current = new mapboxgl.Marker(el)
+      .setLngLat([-73.5673, 45.5017])
+      .addTo(map.current)
 
     // Track GPS position
     if (navigator.geolocation) {
@@ -118,10 +217,66 @@ export default function GPSTestPage() {
           const { longitude, latitude, speed: gpsSpeed, heading: gpsHeading, altitude: gpsAltitude } = position.coords
           console.log(`📍 Position: ${latitude}, ${longitude}`)
 
+          const currentSpeed = gpsSpeed ? gpsSpeed * 3.6 : 0
+
           // Update stats
-          setSpeed(gpsSpeed ? gpsSpeed * 3.6 : 0) // Convert m/s to km/h
+          setSpeed(currentSpeed)
           setHeading(gpsHeading || 0)
           setAltitude(gpsAltitude || 0)
+
+          // Track max speed
+          if (currentSpeed > maxSpeed) {
+            setMaxSpeed(currentSpeed)
+          }
+
+          // Calculate distance traveled
+          if (lastPosition.current) {
+            const R = 6371 // Earth radius in km
+            const dLat = (latitude - lastPosition.current.lat) * Math.PI / 180
+            const dLon = (longitude - lastPosition.current.lng) * Math.PI / 180
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lastPosition.current.lat * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            const distance = R * c
+            setDistanceTraveled(prev => prev + distance)
+          }
+          lastPosition.current = { lng: longitude, lat: latitude }
+
+          // Update trail
+          trail.current.push([longitude, latitude])
+          if (trail.current.length > 100) {
+            trail.current.shift() // Keep only last 100 points
+          }
+
+          // Update marker position
+          if (userMarker.current) {
+            userMarker.current.setLngLat([longitude, latitude])
+          }
+
+          // Update pulse circle
+          if (map.current?.getSource('user-pulse')) {
+            (map.current.getSource('user-pulse') as mapboxgl.GeoJSONSource).setData({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'Point',
+                coordinates: [longitude, latitude]
+              }
+            })
+          }
+
+          // Update trail line
+          if (map.current?.getSource('trail') && trail.current.length > 1) {
+            (map.current.getSource('trail') as mapboxgl.GeoJSONSource).setData({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: trail.current
+              }
+            })
+          }
 
           // Store current position
           setCurrentPosition({ longitude, latitude, heading: gpsHeading || 0 })
@@ -201,64 +356,295 @@ export default function GPSTestPage() {
     }
   }, [currentPosition, viewMode, followGPS])
 
+  // Calculate session time
+  const sessionTime = Math.floor((Date.now() - sessionStart) / 1000)
+  const minutes = Math.floor(sessionTime / 60)
+  const seconds = sessionTime % 60
+
+  // Calculate speedometer angle (0-200 km/h mapped to -135° to 135°)
+  const speedAngle = -135 + (Math.min(speed, 200) / 200) * 270
+
   return (
-    <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative' }}>
+    <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative', overflow: 'hidden' }}>
       {/* Map Container */}
       <div
         ref={mapContainer}
         style={{ width: '100%', height: '100%' }}
       />
 
-      {/* Modern HUD - Top */}
+      {/* Weather Particles */}
+      {weather === 'rain' && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 998,
+          background: 'repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(255,255,255,0.1) 2px, transparent 3px)',
+          animation: 'rain 0.3s linear infinite'
+        }} />
+      )}
+
+      {weather === 'snow' && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 998,
+          background: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)',
+          backgroundSize: '50px 50px',
+          animation: 'snow 3s linear infinite'
+        }} />
+      )}
+
+      {/* Speed Effect - Motion blur lines when moving fast */}
+      {speed > 50 && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 997,
+          background: `repeating-linear-gradient(
+            ${heading}deg,
+            transparent 0px,
+            rgba(255,255,255,${Math.min(speed / 500, 0.2)}) 1px,
+            transparent 2px,
+            transparent 100px
+          )`,
+          animation: 'speedLines 0.1s linear infinite'
+        }} />
+      )}
+
+      {/* Circular Speedometer - Bottom Left */}
+      <div style={{
+        position: 'absolute',
+        bottom: 30,
+        left: 30,
+        width: '180px',
+        height: '180px',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        borderRadius: '50%',
+        border: '3px solid rgba(102, 126, 234, 0.5)',
+        boxShadow: '0 0 40px rgba(102, 126, 234, 0.3), inset 0 0 30px rgba(0,0,0,0.5)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative'
+      }}>
+        {/* Speed arc background */}
+        <svg width="180" height="180" style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
+          <circle cx="90" cy="90" r="70" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="12" />
+          <circle
+            cx="90"
+            cy="90"
+            r="70"
+            fill="none"
+            stroke="url(#speedGradient)"
+            strokeWidth="12"
+            strokeDasharray={`${(Math.min(speed, 200) / 200) * 440} 440`}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.3s ease' }}
+          />
+          <defs>
+            <linearGradient id="speedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="50%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#ef4444" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        {/* Speed value */}
+        <div style={{ textAlign: 'center', zIndex: 1 }}>
+          <div style={{
+            color: 'white',
+            fontSize: '48px',
+            fontWeight: 'bold',
+            fontFamily: 'monospace',
+            textShadow: '0 0 20px rgba(16, 185, 129, 0.8)',
+            lineHeight: 1
+          }}>
+            {speed.toFixed(0)}
+          </div>
+          <div style={{ color: '#10b981', fontSize: '14px', fontWeight: 'bold', marginTop: '5px' }}>
+            KM/H
+          </div>
+          <div style={{ color: '#6b7280', fontSize: '10px', marginTop: '2px' }}>
+            MAX: {maxSpeed.toFixed(0)}
+          </div>
+        </div>
+
+        {/* Speedometer needle */}
+        <div style={{
+          position: 'absolute',
+          width: '2px',
+          height: '60px',
+          background: 'linear-gradient(to bottom, #ef4444, transparent)',
+          transformOrigin: 'bottom center',
+          transform: `rotate(${speedAngle}deg)`,
+          transition: 'transform 0.3s ease',
+          bottom: '90px',
+          left: '89px',
+          filter: 'drop-shadow(0 0 5px #ef4444)'
+        }} />
+      </div>
+
+      {/* Compass Rose - Bottom Right */}
+      <div style={{
+        position: 'absolute',
+        bottom: 30,
+        right: 30,
+        width: '120px',
+        height: '120px',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        borderRadius: '50%',
+        border: '3px solid rgba(59, 130, 246, 0.5)',
+        boxShadow: '0 0 40px rgba(59, 130, 246, 0.3), inset 0 0 30px rgba(0,0,0,0.5)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative'
+      }}>
+        {/* Compass background */}
+        <div style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          transform: `rotate(${-heading}deg)`,
+          transition: 'transform 0.5s ease'
+        }}>
+          {/* Cardinal directions */}
+          <div style={{ position: 'absolute', top: '5px', left: '50%', transform: 'translateX(-50%)', color: '#ef4444', fontSize: '20px', fontWeight: 'bold' }}>N</div>
+          <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontSize: '16px' }}>E</div>
+          <div style={{ position: 'absolute', bottom: '5px', left: '50%', transform: 'translateX(-50%)', color: '#6b7280', fontSize: '16px' }}>S</div>
+          <div style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontSize: '16px' }}>W</div>
+        </div>
+
+        {/* Compass needle */}
+        <div style={{
+          position: 'absolute',
+          width: '4px',
+          height: '50px',
+          background: 'linear-gradient(to bottom, #ef4444, #3b82f6)',
+          clipPath: 'polygon(50% 0%, 100% 100%, 50% 85%, 0% 100%)',
+          filter: 'drop-shadow(0 0 10px #ef4444)'
+        }} />
+
+        {/* Heading value */}
+        <div style={{
+          position: 'absolute',
+          bottom: '15px',
+          fontSize: '12px',
+          color: 'white',
+          fontWeight: 'bold',
+          fontFamily: 'monospace'
+        }}>
+          {heading.toFixed(0)}°
+        </div>
+      </div>
+
+      {/* Session Stats - Top Left */}
+      <div style={{
+        position: 'absolute',
+        top: 20,
+        left: 20,
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        padding: '15px 20px',
+        borderRadius: '20px',
+        border: '2px solid rgba(102, 126, 234, 0.3)',
+        boxShadow: '0 0 30px rgba(102, 126, 234, 0.2)',
+        zIndex: 1000,
+        minWidth: '200px'
+      }}>
+        <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
+          📊 Session
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Distance</span>
+            <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+              {distanceTraveled.toFixed(2)} km
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Temps</span>
+            <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+              {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Altitude</span>
+            <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+              {altitude.toFixed(0)}m
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Weather Toggle - Top Center */}
       <div style={{
         position: 'absolute',
         top: 20,
         left: '50%',
         transform: 'translateX(-50%)',
-        background: 'rgba(0, 0, 0, 0.8)',
-        backdropFilter: 'blur(20px)',
-        padding: '15px 30px',
-        borderRadius: '20px',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        padding: '10px',
+        borderRadius: '15px',
+        border: '2px solid rgba(255, 255, 255, 0.1)',
         zIndex: 1000,
         display: 'flex',
-        gap: '30px',
-        alignItems: 'center'
+        gap: '10px'
       }}>
-        {/* Speed */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ color: '#10b981', fontSize: '12px', marginBottom: '5px' }}>VITESSE</div>
-          <div style={{ color: 'white', fontSize: '32px', fontWeight: 'bold', fontFamily: 'monospace' }}>
-            {speed.toFixed(0)}
-          </div>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>km/h</div>
-        </div>
-
-        {/* Heading */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ color: '#3b82f6', fontSize: '12px', marginBottom: '5px' }}>DIRECTION</div>
-          <div style={{ color: 'white', fontSize: '32px', fontWeight: 'bold', fontFamily: 'monospace' }}>
-            {heading.toFixed(0)}°
-          </div>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>
-            {heading >= 337.5 || heading < 22.5 ? 'N' :
-             heading >= 22.5 && heading < 67.5 ? 'NE' :
-             heading >= 67.5 && heading < 112.5 ? 'E' :
-             heading >= 112.5 && heading < 157.5 ? 'SE' :
-             heading >= 157.5 && heading < 202.5 ? 'S' :
-             heading >= 202.5 && heading < 247.5 ? 'SW' :
-             heading >= 247.5 && heading < 292.5 ? 'W' : 'NW'}
-          </div>
-        </div>
-
-        {/* Altitude */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ color: '#f59e0b', fontSize: '12px', marginBottom: '5px' }}>ALTITUDE</div>
-          <div style={{ color: 'white', fontSize: '32px', fontWeight: 'bold', fontFamily: 'monospace' }}>
-            {altitude.toFixed(0)}
-          </div>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>mètres</div>
-        </div>
+        <button
+          onClick={() => setWeather('clear')}
+          style={{
+            background: weather === 'clear' ? 'rgba(102, 126, 234, 0.5)' : 'transparent',
+            border: weather === 'clear' ? '2px solid #667eea' : '2px solid transparent',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            color: 'white',
+            fontSize: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          ☀️
+        </button>
+        <button
+          onClick={() => setWeather('rain')}
+          style={{
+            background: weather === 'rain' ? 'rgba(59, 130, 246, 0.5)' : 'transparent',
+            border: weather === 'rain' ? '2px solid #3b82f6' : '2px solid transparent',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            color: 'white',
+            fontSize: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          🌧️
+        </button>
+        <button
+          onClick={() => setWeather('snow')}
+          style={{
+            background: weather === 'snow' ? 'rgba(156, 163, 175, 0.5)' : 'transparent',
+            border: weather === 'snow' ? '2px solid #9ca3af' : '2px solid transparent',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            color: 'white',
+            fontSize: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          ❄️
+        </button>
       </div>
 
       {/* View Mode Toggle - Top Right */}
@@ -326,30 +712,32 @@ export default function GPSTestPage() {
         )}
       </div>
 
-      {/* Status Badge - Bottom Right */}
+      {/* Status Badge - Bottom Center */}
       <div style={{
         position: 'absolute',
-        bottom: 20,
-        right: 20,
+        bottom: 30,
+        left: '50%',
+        transform: 'translateX(-50%)',
         background: followGPS ? 'rgba(16, 185, 129, 0.9)' : 'rgba(234, 179, 8, 0.9)',
-        backdropFilter: 'blur(20px)',
-        padding: '10px 20px',
-        borderRadius: '15px',
+        backdropFilter: 'blur(30px)',
+        padding: '12px 25px',
+        borderRadius: '20px',
         border: followGPS ? '2px solid rgba(16, 185, 129, 0.5)' : '2px solid rgba(234, 179, 8, 0.5)',
+        boxShadow: followGPS ? '0 0 30px rgba(16, 185, 129, 0.3)' : '0 0 30px rgba(234, 179, 8, 0.3)',
         zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
-        gap: '10px'
+        gap: '12px'
       }}>
         <div style={{
-          width: '10px',
-          height: '10px',
+          width: '12px',
+          height: '12px',
           borderRadius: '50%',
           background: followGPS ? '#10b981' : '#eab308',
           animation: 'pulse 2s infinite',
-          boxShadow: followGPS ? '0 0 10px #10b981' : '0 0 10px #eab308'
+          boxShadow: followGPS ? '0 0 15px #10b981' : '0 0 15px #eab308'
         }} />
-        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>
+        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
           {followGPS
             ? (viewMode === 'immersive' ? '🏎️ GPS IMMERSIF' : '🗺️ GPS CARTE')
             : '🖐️ FREE ROAM'}
@@ -382,6 +770,81 @@ export default function GPSTestPage() {
             opacity: 0.5;
             transform: scale(1.2);
           }
+        }
+
+        @keyframes userPulse {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 40px rgba(102, 126, 234, 0.4);
+          }
+          50% {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(102, 126, 234, 1), 0 0 60px rgba(102, 126, 234, 0.6);
+          }
+        }
+
+        @keyframes rain {
+          0% {
+            background-position: 0 0;
+          }
+          100% {
+            background-position: 0 100vh;
+          }
+        }
+
+        @keyframes snow {
+          0% {
+            background-position: 0 0, 25px 25px;
+          }
+          100% {
+            background-position: 0 100vh, 25px calc(100vh + 25px);
+          }
+        }
+
+        @keyframes speedLines {
+          0% {
+            opacity: 0.8;
+          }
+          100% {
+            opacity: 0.3;
+          }
+        }
+
+        @keyframes glow {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5), 0 0 40px rgba(102, 126, 234, 0.3), inset 0 0 20px rgba(102, 126, 234, 0.1);
+          }
+          50% {
+            box-shadow: 0 0 30px rgba(102, 126, 234, 0.8), 0 0 60px rgba(102, 126, 234, 0.5), inset 0 0 30px rgba(102, 126, 234, 0.2);
+          }
+        }
+
+        @keyframes float {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-10px);
+          }
+        }
+
+        /* Custom scrollbar for stats */
+        ::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: rgba(102, 126, 234, 0.5);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(102, 126, 234, 0.8);
         }
       `}</style>
     </div>
