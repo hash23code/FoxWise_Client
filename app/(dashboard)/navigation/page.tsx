@@ -23,6 +23,9 @@ export default function NavigationPage() {
   const [showJobList, setShowJobList] = useState(false)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [debugInfo, setDebugInfo] = useState<string[]>([])
+  const [freeRideMode, setFreeRideMode] = useState(false)
+  const [newJobNotification, setNewJobNotification] = useState<Job | null>(null)
+  const [previousJobCount, setPreviousJobCount] = useState(0)
 
   const addDebug = (msg: string) => {
     console.log('[Navigation]', msg)
@@ -43,6 +46,11 @@ export default function NavigationPage() {
     }
 
     fetchJobs()
+
+    // Poll for new jobs every 10 seconds
+    const pollInterval = setInterval(() => {
+      fetchJobs()
+    }, 10000)
 
     if (navigator.geolocation) {
       addDebug('Geolocation available, requesting permission...')
@@ -70,6 +78,7 @@ export default function NavigationPage() {
       )
 
       return () => {
+        clearInterval(pollInterval)
         if (watchId) {
           addDebug('Cleaning up geolocation watch')
           navigator.geolocation.clearWatch(watchId)
@@ -93,7 +102,25 @@ export default function NavigationPage() {
           (job: Job) => job.assigned_to && job.status !== 'cancelled' && job.status !== 'completed'
         )
         addDebug(`${assignedJobs.length} assigned jobs`)
+
+        // Check for new jobs and show notification
+        if (previousJobCount > 0 && assignedJobs.length > previousJobCount) {
+          const newJob = assignedJobs[0] // Assume newest job is first
+          setNewJobNotification(newJob)
+          addDebug(`🚨 NEW JOB ASSIGNED: ${newJob.title}`)
+
+          // Auto-dismiss notification after 5 seconds
+          setTimeout(() => setNewJobNotification(null), 5000)
+        }
+
+        setPreviousJobCount(assignedJobs.length)
         setJobs(assignedJobs)
+
+        // If no jobs or current job has no coordinates, enable free ride mode
+        if (assignedJobs.length === 0 || (assignedJobs[0] && !assignedJobs[0].latitude)) {
+          setFreeRideMode(true)
+          addDebug('Free ride mode enabled')
+        }
 
         if (!selectedJob && assignedJobs.length > 0) {
           const job = assignedJobs[0]
@@ -101,6 +128,11 @@ export default function NavigationPage() {
           addDebug(`Selected job: ${job.title}`)
           addDebug(`Job has coordinates: ${job.latitude ? 'YES' : 'NO'} (lat: ${job.latitude}, lng: ${job.longitude})`)
           addDebug(`Client address: ${job.client?.address || 'N/A'}`)
+
+          // If job has coordinates, disable free ride mode
+          if (job.latitude && job.longitude) {
+            setFreeRideMode(false)
+          }
         }
       } else {
         addDebug(`Failed to fetch jobs: ${res.status}`)
@@ -298,20 +330,6 @@ export default function NavigationPage() {
     )
   }
 
-  if (jobs.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-950">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center max-w-md mx-4">
-          <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-2">Aucun Job Assigné</h2>
-          <p className="text-gray-400">
-            Vous n&apos;avez aucun job assigné pour le moment. Contactez votre gestionnaire pour plus d&apos;informations.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="h-full flex relative overflow-hidden bg-gray-950">
       {/* Debug button */}
@@ -443,70 +461,43 @@ export default function NavigationPage() {
         />
       )}
 
-      {/* Map Container */}
+      {/* Map Container - Always shown (free ride mode if no destination) */}
       <div className="flex-1 relative">
-        {selectedJob && selectedJob.latitude && selectedJob.longitude ? (
-          <NavigationMap
-            destination={selectedJob}
-            apiKey={mapboxApiKey}
-            onArrival={handleArrival}
-            onLocationUpdate={updateEmployeeLocation}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full bg-gray-950">
-            <div className="text-center px-4 max-w-md">
-              <AlertCircle className="w-16 h-16 text-yellow-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-white mb-2">Aucune destination</h2>
+        <NavigationMap
+          destination={selectedJob && selectedJob.latitude && selectedJob.longitude ? selectedJob : null}
+          apiKey={mapboxApiKey}
+          onArrival={handleArrival}
+          onLocationUpdate={updateEmployeeLocation}
+          freeRideMode={freeRideMode}
+        />
+      </div>
 
-              {selectedJob ? (
-                <div className="space-y-4">
-                  <p className="text-gray-400">
-                    Le job <span className="text-white font-semibold">&quot;{selectedJob.title}&quot;</span> n&apos;a pas d&apos;adresse géolocalisée.
-                  </p>
-
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-left">
-                    <h3 className="text-blue-400 font-semibold mb-2 text-sm">💡 Solution:</h3>
-                    <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
-                      <li>Allez sur <code className="bg-black/50 px-1 py-0.5 rounded">/jobs-map</code></li>
-                      <li>Cliquez sur ce job</li>
-                      <li>Modifiez-le et ajoutez une <strong>adresse complète</strong></li>
-                      <li>Ex: &quot;123 Rue Saint-Denis, Montréal, QC H2X 3K8&quot;</li>
-                      <li>Sauvegardez - l&apos;adresse sera géocodée automatiquement!</li>
-                    </ol>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => window.location.href = '/jobs-map'}
-                      className="flex-1 bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-all text-sm"
-                    >
-                      Aller à Jobs Map
-                    </button>
-                    <button
-                      onClick={() => setShowJobList(true)}
-                      className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-600 transition-all text-sm"
-                    >
-                      Changer de job
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-gray-400 mb-4">
-                    Sélectionnez un job dans la liste pour commencer la navigation.
-                  </p>
-                  <button
-                    onClick={() => setShowJobList(true)}
-                    className="bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-600 transition-all"
-                  >
-                    Voir mes jobs
-                  </button>
-                </div>
-              )}
+      {/* New Job Notification */}
+      {newJobNotification && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
+          <div className="bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-2xl p-4 border-2 border-orange-300 shadow-2xl max-w-sm">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-full">
+                <MapPin className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <div className="font-bold text-base">Nouveau Job Assigné!</div>
+                <div className="text-sm opacity-90">{newJobNotification.title}</div>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedJob(newJobNotification)
+                  setNewJobNotification(null)
+                  setFreeRideMode(false)
+                }}
+                className="bg-white text-orange-600 px-3 py-1 rounded-lg font-semibold text-sm hover:bg-gray-100"
+              >
+                Voir
+              </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
