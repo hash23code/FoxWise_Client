@@ -16,6 +16,7 @@ import {
   Building2,
   Menu,
   X,
+  Navigation,
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
@@ -59,6 +60,12 @@ export default function Sidebar() {
       href: "/jobs",
       icon: Briefcase,
       gradient: "from-green-500 to-emerald-500"
+    },
+    {
+      name: "Navigation",
+      href: "/navigation",
+      icon: Navigation,
+      gradient: "from-blue-600 to-purple-600"
     },
     {
       name: "Activités",
