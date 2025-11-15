@@ -352,15 +352,15 @@ export default function NavigationPage() {
         // Set rain with official Mapbox API
         if (typeof mapAny.setRain === 'function') {
           mapAny.setRain({
-            density: 0.8,
-            intensity: 1.0,
+            density: 0.6,
+            intensity: 0.8,
             color: '#a8adbc',
-            opacity: 0.7,
-            vignette: 1.0,
+            opacity: 0.3,
+            vignette: 0.6,
             'vignette-color': '#464646',
             direction: [0, 80],
             'droplet-size': [2.6, 18.2],
-            'distortion-strength': 0.7,
+            'distortion-strength': 0.5,
             'center-thinning': 0
           })
           console.log('✅ Rain enabled')
@@ -409,7 +409,19 @@ export default function NavigationPage() {
   const speedAngle = -135 + (Math.min(speed, 200) / 200) * 270
 
   return (
-    <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative', overflow: 'hidden' }}>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: '100vw',
+      height: '100vh',
+      margin: 0,
+      padding: 0,
+      overflow: 'hidden',
+      zIndex: 50
+    }}>
       {/* Map Container */}
       <div
         ref={mapContainer}
