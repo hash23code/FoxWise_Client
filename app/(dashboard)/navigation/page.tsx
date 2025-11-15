@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import type { Job, Client } from '@/types'
 
 export default function NavigationPage() {
   const mapContainer = useRef<HTMLDivElement | null>(null)
   const map = useRef<mapboxgl.Map | null>(null)
   const userMarker = useRef<mapboxgl.Marker | null>(null)
+  const jobMarkers = useRef<mapboxgl.Marker[]>([])
   const [speed, setSpeed] = useState(0)
   const [heading, setHeading] = useState(0)
   const [altitude, setAltitude] = useState(0)
@@ -20,6 +22,84 @@ export default function NavigationPage() {
   const lastPosition = useRef<{ lng: number; lat: number } | null>(null)
   const trail = useRef<Array<[number, number]>>([])
   const [weather, setWeather] = useState<'clear' | 'rain' | 'snow'>('clear')
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+
+  // Fetch jobs
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const res = await fetch('/api/jobs')
+        if (res.ok) {
+          const data = await res.json()
+          setJobs(data)
+          console.log('✅ Jobs fetched:', data.length)
+        }
+      } catch (error) {
+        console.error('❌ Error fetching jobs:', error)
+      }
+    }
+    fetchJobs()
+  }, [])
+
+  // Display jobs on map
+  useEffect(() => {
+    if (!map.current || jobs.length === 0) return
+
+    // Clear existing job markers
+    jobMarkers.current.forEach(marker => marker.remove())
+    jobMarkers.current = []
+
+    // Add marker for each job with coordinates
+    jobs.forEach(job => {
+      if (!job.latitude || !job.longitude) return
+
+      // Color based on priority
+      const getColor = () => {
+        switch (job.priority) {
+          case 'urgent': return '#ef4444' // red
+          case 'high': return '#f59e0b' // orange
+          case 'medium': return '#3b82f6' // blue
+          case 'low': return '#10b981' // green
+          default: return '#6b7280' // gray
+        }
+      }
+
+      const color = getColor()
+
+      // Create marker element
+      const el = document.createElement('div')
+      el.className = 'job-marker'
+      el.style.cssText = `
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        filter: drop-shadow(0 0 8px ${color});
+      `
+
+      el.innerHTML = `
+        <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="18" fill="${color}" stroke="white" stroke-width="2.5"/>
+          <text x="20" y="25" text-anchor="middle" fill="white" font-size="18" font-weight="bold">📍</text>
+        </svg>
+      `
+
+      // Click handler
+      el.addEventListener('click', () => {
+        setSelectedJob(job)
+        console.log('📍 Job selected:', job.title)
+      })
+
+      // Create and add marker
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([job.longitude, job.latitude])
+        .addTo(map.current!)
+
+      jobMarkers.current.push(marker)
+    })
+
+    console.log(`✅ ${jobMarkers.current.length} job markers added to map`)
+  }, [jobs, map.current])
 
   // Initialize map ONCE
   useEffect(() => {
@@ -442,7 +522,7 @@ export default function NavigationPage() {
       margin: 0,
       padding: 0,
       overflow: 'hidden',
-      zIndex: 50
+      zIndex: 10
     }}>
       {/* Map Container */}
       <div
@@ -796,6 +876,349 @@ export default function NavigationPage() {
         </div>
       </div>
 
+      {/* Selected Job Panel - Right Side */}
+      {selectedJob && (
+        <div style={{
+          position: 'absolute',
+          top: 100,
+          right: 20,
+          width: '350px',
+          maxHeight: 'calc(100vh - 200px)',
+          background: 'rgba(0, 0, 0, 0.9)',
+          backdropFilter: 'blur(30px)',
+          borderRadius: '20px',
+          border: '2px solid rgba(102, 126, 234, 0.4)',
+          boxShadow: '0 0 40px rgba(102, 126, 234, 0.3)',
+          zIndex: 1000,
+          overflow: 'hidden',
+          animation: 'slideInRight 0.3s ease'
+        }}>
+          {/* Header */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(59, 130, 246, 0.3))',
+            padding: '20px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start'
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>
+                📍 JOB SÉLECTIONNÉ
+              </div>
+              <div style={{ color: 'white', fontSize: '18px', fontWeight: 'bold', lineHeight: 1.3 }}>
+                {selectedJob.title}
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedJob(null)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Content */}
+          <div style={{
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 360px)'
+          }}>
+            {/* Client */}
+            {selectedJob.client && (
+              <div>
+                <div style={{ color: '#9ca3af', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Client
+                </div>
+                <div style={{ color: 'white', fontSize: '15px', fontWeight: 'bold' }}>
+                  {selectedJob.client.name}
+                </div>
+                {selectedJob.client.formatted_address && (
+                  <div style={{ color: '#6b7280', fontSize: '13px', marginTop: '4px' }}>
+                    📍 {selectedJob.client.formatted_address}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Status and Priority */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#9ca3af', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Statut
+                </div>
+                <div style={{
+                  background: selectedJob.status === 'completed' ? 'rgba(16, 185, 129, 0.2)' :
+                              selectedJob.status === 'in_progress' ? 'rgba(59, 130, 246, 0.2)' :
+                              selectedJob.status === 'cancelled' ? 'rgba(239, 68, 68, 0.2)' :
+                              'rgba(234, 179, 8, 0.2)',
+                  border: selectedJob.status === 'completed' ? '1px solid #10b981' :
+                          selectedJob.status === 'in_progress' ? '1px solid #3b82f6' :
+                          selectedJob.status === 'cancelled' ? '1px solid #ef4444' :
+                          '1px solid #eab308',
+                  color: selectedJob.status === 'completed' ? '#10b981' :
+                         selectedJob.status === 'in_progress' ? '#3b82f6' :
+                         selectedJob.status === 'cancelled' ? '#ef4444' :
+                         '#eab308',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  textTransform: 'capitalize'
+                }}>
+                  {selectedJob.status === 'in_progress' ? 'En cours' :
+                   selectedJob.status === 'completed' ? 'Terminé' :
+                   selectedJob.status === 'cancelled' ? 'Annulé' :
+                   'En attente'}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#9ca3af', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Priorité
+                </div>
+                <div style={{
+                  background: selectedJob.priority === 'urgent' ? 'rgba(239, 68, 68, 0.2)' :
+                              selectedJob.priority === 'high' ? 'rgba(245, 158, 11, 0.2)' :
+                              selectedJob.priority === 'medium' ? 'rgba(59, 130, 246, 0.2)' :
+                              'rgba(16, 185, 129, 0.2)',
+                  border: selectedJob.priority === 'urgent' ? '1px solid #ef4444' :
+                          selectedJob.priority === 'high' ? '1px solid #f59e0b' :
+                          selectedJob.priority === 'medium' ? '1px solid #3b82f6' :
+                          '1px solid #10b981',
+                  color: selectedJob.priority === 'urgent' ? '#ef4444' :
+                         selectedJob.priority === 'high' ? '#f59e0b' :
+                         selectedJob.priority === 'medium' ? '#3b82f6' :
+                         '#10b981',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  textTransform: 'capitalize'
+                }}>
+                  {selectedJob.priority === 'urgent' ? '🔴 Urgent' :
+                   selectedJob.priority === 'high' ? '🟠 Haute' :
+                   selectedJob.priority === 'medium' ? '🔵 Moyenne' :
+                   '🟢 Basse'}
+                </div>
+              </div>
+            </div>
+
+            {/* Description */}
+            {selectedJob.description && (
+              <div>
+                <div style={{ color: '#9ca3af', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Description
+                </div>
+                <div style={{ color: '#d1d5db', fontSize: '13px', lineHeight: 1.5 }}>
+                  {selectedJob.description}
+                </div>
+              </div>
+            )}
+
+            {/* Coordinates */}
+            {selectedJob.latitude && selectedJob.longitude && (
+              <div>
+                <div style={{ color: '#9ca3af', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Coordonnées
+                </div>
+                <div style={{ color: '#6b7280', fontSize: '12px', fontFamily: 'monospace' }}>
+                  {selectedJob.latitude.toFixed(6)}, {selectedJob.longitude.toFixed(6)}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+              <button
+                onClick={() => {
+                  if (selectedJob.latitude && selectedJob.longitude && map.current) {
+                    map.current.flyTo({
+                      center: [selectedJob.longitude, selectedJob.latitude],
+                      zoom: 18,
+                      pitch: 70,
+                      duration: 2000
+                    })
+                    console.log('🚀 Navigating to job location')
+                  }
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #667eea, #3b82f6)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '14px 20px',
+                  color: 'white',
+                  fontSize: '15px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)'
+                }}
+              >
+                🧭 Naviguer vers ce job
+              </button>
+
+              {selectedJob.status === 'pending' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/jobs/${selectedJob.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'in_progress', location_status: 'en_route' })
+                      })
+                      if (res.ok) {
+                        const updatedJob = await res.json()
+                        setSelectedJob(updatedJob)
+                        setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
+                        console.log('✅ Job status updated to in_progress')
+                      }
+                    } catch (error) {
+                      console.error('❌ Error updating job:', error)
+                    }
+                  }}
+                  style={{
+                    background: 'rgba(59, 130, 246, 0.2)',
+                    border: '1px solid #3b82f6',
+                    borderRadius: '12px',
+                    padding: '12px 20px',
+                    color: '#3b82f6',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'
+                  }}
+                >
+                  🚀 Démarrer le job
+                </button>
+              )}
+
+              {selectedJob.status === 'in_progress' && (
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/jobs/${selectedJob.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            location_status: 'arrived',
+                            arrived_at: new Date().toISOString()
+                          })
+                        })
+                        if (res.ok) {
+                          const updatedJob = await res.json()
+                          setSelectedJob(updatedJob)
+                          setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
+                          console.log('✅ Marked as arrived')
+                        }
+                      } catch (error) {
+                        console.error('❌ Error updating job:', error)
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.2)',
+                      border: '1px solid #f59e0b',
+                      borderRadius: '12px',
+                      padding: '12px 20px',
+                      color: '#f59e0b',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(245, 158, 11, 0.3)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(245, 158, 11, 0.2)'
+                    }}
+                  >
+                    📍 Marqué comme arrivé
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/jobs/${selectedJob.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            status: 'completed',
+                            location_status: 'completed',
+                            completed_at: new Date().toISOString(),
+                            completed_date: new Date().toISOString()
+                          })
+                        })
+                        if (res.ok) {
+                          const updatedJob = await res.json()
+                          setSelectedJob(updatedJob)
+                          setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
+                          console.log('✅ Job completed')
+                        }
+                      } catch (error) {
+                        console.error('❌ Error updating job:', error)
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      border: '1px solid #10b981',
+                      borderRadius: '12px',
+                      padding: '12px 20px',
+                      color: '#10b981',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(16, 185, 129, 0.3)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)'
+                    }}
+                  >
+                    ✅ Terminer le job
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Gradient Overlays for depth */}
       <div style={{
         position: 'absolute',
@@ -859,6 +1282,17 @@ export default function NavigationPage() {
           }
           50% {
             transform: translateY(-10px);
+          }
+        }
+
+        @keyframes slideInRight {
+          0% {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          100% {
+            transform: translateX(0);
+            opacity: 1;
           }
         }
 
