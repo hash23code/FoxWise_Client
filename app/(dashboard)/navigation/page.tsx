@@ -664,17 +664,18 @@ export default function NavigationPage() {
     const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY
 
     try {
-      // Use Mapbox Directions API with driving profile
-      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${destinationLng},${destinationLat}?geometries=geojson&steps=true&banner_instructions=true&voice_instructions=true&access_token=${apiKey}`
+      // Use Mapbox Directions API with driving profile - fixed to follow roads
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${destinationLng},${destinationLat}?alternatives=false&geometries=geojson&language=fr&overview=full&steps=true&access_token=${apiKey}`
 
+      console.log('🗺️ Calculating route...')
       const response = await fetch(url)
       const data = await response.json()
 
       if (data.routes && data.routes.length > 0) {
         const route = data.routes[0]
-        console.log('✅ Route calculated:', route.distance, 'meters,', route.duration, 'seconds')
+        console.log('✅ Route calculated:', (route.distance / 1000).toFixed(2), 'km,', Math.ceil(route.duration / 60), 'min')
 
-        // Update map with route
+        // Update map with route - THIS is the geometry that follows roads!
         if (map.current?.getSource('navigation-route')) {
           (map.current.getSource('navigation-route') as mapboxgl.GeoJSONSource).setData({
             type: 'Feature',
@@ -687,13 +688,28 @@ export default function NavigationPage() {
         const instructions = route.legs[0].steps.map((step: any) => ({
           instruction: step.maneuver.instruction,
           distance: step.distance,
-          duration: step.duration
+          duration: step.duration,
+          location: step.maneuver.location
         }))
 
         setActiveRoute(route)
         setRouteInstructions(instructions)
         setCurrentStepIndex(0)
         setNavigationMode(true)
+
+        // Fit map to show entire route
+        if (map.current && route.geometry.coordinates.length > 0) {
+          const coordinates = route.geometry.coordinates
+          const bounds = coordinates.reduce((bounds: any, coord: any) => {
+            return bounds.extend(coord)
+          }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]))
+
+          map.current.fitBounds(bounds, {
+            padding: { top: 100, bottom: 100, left: 100, right: 100 },
+            maxZoom: 15,
+            duration: 1500
+          })
+        }
 
         return route
       } else {
@@ -770,11 +786,12 @@ export default function NavigationPage() {
         }} />
       )}
 
-      {/* Circular Speedometer - Bottom Left */}
-      <div style={{
-        position: 'absolute',
-        bottom: 30,
-        left: 30,
+      {/* Circular Speedometer - Bottom Left - Hide when navigating for mobile space */}
+      {!navigationMode && (
+        <div style={{
+          position: 'absolute',
+          bottom: 30,
+          left: 30,
         width: '180px',
         height: '180px',
         background: 'rgba(0, 0, 0, 0.85)',
@@ -843,13 +860,15 @@ export default function NavigationPage() {
           left: '89px',
           filter: 'drop-shadow(0 0 5px #ef4444)'
         }} />
-      </div>
+        </div>
+      )}
 
-      {/* Compass Rose - Bottom Right */}
-      <div style={{
-        position: 'absolute',
-        bottom: 30,
-        right: 30,
+      {/* Compass Rose - Bottom Right - Hide when navigating */}
+      {!navigationMode && (
+        <div style={{
+          position: 'absolute',
+          bottom: 30,
+          right: 30,
         width: '120px',
         height: '120px',
         background: 'rgba(0, 0, 0, 0.85)',
@@ -898,22 +917,24 @@ export default function NavigationPage() {
         }}>
           {heading.toFixed(0)}°
         </div>
-      </div>
+        </div>
+      )}
 
-      {/* Session Stats - Top Left */}
-      <div style={{
-        position: 'absolute',
-        top: 20,
-        left: 20,
-        background: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(30px)',
-        padding: '15px 20px',
-        borderRadius: '20px',
-        border: '2px solid rgba(102, 126, 234, 0.3)',
-        boxShadow: '0 0 30px rgba(102, 126, 234, 0.2)',
-        zIndex: 1000,
-        minWidth: '200px'
-      }}>
+      {/* Session Stats - Top Left - Hide on mobile when navigating */}
+      {!navigationMode && (
+        <div style={{
+          position: 'absolute',
+          top: 20,
+          left: 20,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(30px)',
+          padding: '15px 20px',
+          borderRadius: '20px',
+          border: '2px solid rgba(102, 126, 234, 0.3)',
+          boxShadow: '0 0 30px rgba(102, 126, 234, 0.2)',
+          zIndex: 1000,
+          minWidth: '200px'
+        }}>
         <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
           📊 Session
         </div>
@@ -937,81 +958,99 @@ export default function NavigationPage() {
             </span>
           </div>
         </div>
-      </div>
-
-      {/* Navigation Instructions Panel - Below Session Stats */}
-      {navigationMode && routeInstructions.length > 0 && (
-        <div style={{
-          position: 'absolute',
-          top: 180,
-          left: 20,
-          background: 'rgba(0, 0, 0, 0.9)',
-          backdropFilter: 'blur(30px)',
-          padding: '20px',
-          borderRadius: '20px',
-          border: '2px solid rgba(59, 130, 246, 0.5)',
-          boxShadow: '0 0 40px rgba(59, 130, 246, 0.3)',
-          zIndex: 1000,
-          minWidth: '300px',
-          maxWidth: '400px',
-          animation: 'slideInLeft 0.3s ease'
-        }}>
-          <div style={{ color: '#3b82f6', fontSize: '12px', fontWeight: 'bold', marginBottom: '15px', textTransform: 'uppercase' }}>
-            🧭 Navigation Active
-          </div>
-
-          {/* Current instruction */}
-          {currentStepIndex < routeInstructions.length && (
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(102, 126, 234, 0.2))',
-              padding: '15px',
-              borderRadius: '12px',
-              marginBottom: '15px'
-            }}>
-              <div style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', marginBottom: '8px', lineHeight: 1.4 }}>
-                {routeInstructions[currentStepIndex].instruction}
-              </div>
-              <div style={{ color: '#9ca3af', fontSize: '13px' }}>
-                Dans {(routeInstructions[currentStepIndex].distance).toFixed(0)}m
-              </div>
-            </div>
-          )}
-
-          {/* Route summary */}
-          {activeRoute && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', marginTop: '10px' }}>
-              <div>
-                <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>Distance totale</div>
-                <div style={{ color: 'white', fontSize: '14px', fontWeight: 'bold' }}>
-                  {(activeRoute.distance / 1000).toFixed(1)} km
-                </div>
-              </div>
-              <div>
-                <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>Temps estimé</div>
-                <div style={{ color: 'white', fontSize: '14px', fontWeight: 'bold' }}>
-                  {Math.ceil(activeRoute.duration / 60)} min
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Weather Toggle - Top Center */}
-      <div style={{
-        position: 'absolute',
-        top: 20,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(30px)',
-        padding: '10px',
-        borderRadius: '15px',
-        border: '2px solid rgba(255, 255, 255, 0.1)',
-        zIndex: 1000,
-        display: 'flex',
-        gap: '10px'
-      }}>
+      {/* Compact Navigation Bar - Top of screen (mobile-friendly) */}
+      {navigationMode && routeInstructions.length > 0 && currentStepIndex < routeInstructions.length && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          background: 'rgba(0, 0, 0, 0.95)',
+          backdropFilter: 'blur(20px)',
+          padding: '15px 20px',
+          borderBottom: '2px solid rgba(59, 130, 246, 0.5)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+          zIndex: 1500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px',
+          animation: 'slideDown 0.3s ease'
+        }}>
+          {/* Distance indicator */}
+          <div style={{
+            minWidth: '70px',
+            background: 'linear-gradient(135deg, #3b82f6, #667eea)',
+            padding: '8px 12px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <div style={{ color: 'white', fontSize: '18px', fontWeight: 'bold', lineHeight: 1 }}>
+              {routeInstructions[currentStepIndex].distance >= 1000
+                ? `${(routeInstructions[currentStepIndex].distance / 1000).toFixed(1)} km`
+                : `${Math.round(routeInstructions[currentStepIndex].distance)} m`}
+            </div>
+          </div>
+
+          {/* Instruction */}
+          <div style={{ flex: 1 }}>
+            <div style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', lineHeight: 1.3 }}>
+              {routeInstructions[currentStepIndex].instruction}
+            </div>
+            {activeRoute && (
+              <div style={{ color: '#9ca3af', fontSize: '12px', marginTop: '4px' }}>
+                {(activeRoute.distance / 1000).toFixed(1)} km • {Math.ceil(activeRoute.duration / 60)} min
+              </div>
+            )}
+          </div>
+
+          {/* Close button */}
+          <button
+            onClick={() => {
+              clearRoute()
+              console.log('🛑 Navigation stopped')
+            }}
+            style={{
+              background: 'rgba(239, 68, 68, 0.2)',
+              border: '1px solid #ef4444',
+              borderRadius: '8px',
+              width: '36px',
+              height: '36px',
+              color: '#ef4444',
+              cursor: 'pointer',
+              fontSize: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Weather Toggle - Top Center - Hide when navigating */}
+      {!navigationMode && (
+        <div style={{
+          position: 'absolute',
+          top: 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(30px)',
+          padding: '10px',
+          borderRadius: '15px',
+          border: '2px solid rgba(255, 255, 255, 0.1)',
+          zIndex: 1000,
+          display: 'flex',
+          gap: '10px'
+        }}>
         <button
           onClick={() => setWeather('clear')}
           style={{
@@ -1057,17 +1096,19 @@ export default function NavigationPage() {
         >
           ❄️
         </button>
-      </div>
+        </div>
+      )}
 
-      {/* View Mode Toggle - Top Right */}
+      {/* View Mode Toggle - Top Right - Keep visible but simplify when navigating */}
       <div style={{
         position: 'absolute',
-        top: 20,
+        top: navigationMode ? 80 : 20,
         right: 20,
         zIndex: 1000,
         display: 'flex',
         flexDirection: 'column',
-        gap: '10px'
+        gap: '10px',
+        transition: 'top 0.3s ease'
       }}>
         <button
           onClick={() => setViewMode(viewMode === 'immersive' ? 'overhead' : 'immersive')}
@@ -1651,6 +1692,17 @@ export default function NavigationPage() {
           }
           100% {
             transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes slideDown {
+          0% {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          100% {
+            transform: translateY(0);
             opacity: 1;
           }
         }
