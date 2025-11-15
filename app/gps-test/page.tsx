@@ -36,10 +36,10 @@ export default function GPSTestPage() {
     console.log('✅ API Key présente')
     mapboxgl.accessToken = apiKey
 
-    // Create map with 3D navigation style
+    // Create map with Mapbox Standard style (richest 3D experience)
     map.current = new mapboxgl.Map({
       container: mapContainer.current!,
-      style: 'mapbox://styles/mapbox/navigation-night-v1',
+      style: 'mapbox://styles/mapbox/standard',
       center: [-73.5673, 45.5017], // Montreal
       zoom: 17,
       pitch: 70, // Inclinaison 3D immersive
@@ -49,103 +49,46 @@ export default function GPSTestPage() {
 
     console.log('✅ Map 3D créée')
 
-    // When map loads, add 3D buildings and atmosphere
-    map.current.on('load', () => {
+    // When map loads, configure Standard style for maximum detail
+    map.current.on('style.load', () => {
       if (!map.current) return
 
-      console.log('✅ Map chargée, ajout des effets 3D...')
+      console.log('✅ Map chargée, configuration du style Standard...')
 
-      // Add 3D buildings layer with enhanced lighting
-      map.current.addLayer({
-        id: '3d-buildings',
-        source: 'composite',
-        'source-layer': 'building',
-        filter: ['==', 'extrude', 'true'],
-        type: 'fill-extrusion',
-        minzoom: 14,
-        paint: {
-          'fill-extrusion-color': [
-            'interpolate',
-            ['linear'],
-            ['get', 'height'],
-            0, '#0a0a1e',
-            20, '#1a1a3e',
-            50, '#2a2a5e',
-            100, '#3a3a7e',
-            200, '#4a4a9e'
-          ],
-          'fill-extrusion-height': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            15, 0,
-            15.05, ['get', 'height']
-          ],
-          'fill-extrusion-base': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            15, 0,
-            15.05, ['get', 'min_height']
-          ],
-          'fill-extrusion-opacity': 0.9,
-          'fill-extrusion-vertical-gradient': true
-        }
-      })
+      // Configure Standard style lighting for dusk/night atmosphere
+      try {
+        map.current.setConfigProperty('basemap', 'lightPreset', 'dusk')
+        console.log('✅ Lighting preset: dusk')
+      } catch (error) {
+        console.log('Config property not supported')
+      }
 
-      // Add enhanced sky layer with dynamic lighting
-      map.current.addLayer({
-        id: 'sky',
-        type: 'sky',
-        paint: {
-          'sky-type': 'atmosphere',
-          'sky-atmosphere-sun': [0.0, 80.0],
-          'sky-atmosphere-sun-intensity': 20,
-          'sky-atmosphere-halo-color': 'rgba(102, 126, 234, 0.8)',
-          'sky-atmosphere-color': 'rgba(26, 26, 46, 0.9)',
-          'sky-gradient-center': [0, 0],
-          'sky-gradient-radius': 90,
-          'sky-opacity': [
-            'interpolate',
-            ['exponential', 0.1],
-            ['zoom'],
-            5, 0,
-            22, 1
-          ]
-        }
-      })
+      // Enable 3D buildings and landmarks (already included in Standard)
+      try {
+        map.current.setConfigProperty('basemap', 'show3dObjects', true)
+        console.log('✅ 3D objects enabled')
+      } catch (error) {
+        console.log('3D objects config not supported')
+      }
 
-      // Add fog for ultra-depth perception
+      // Add enhanced fog for depth perception
       try {
         if (typeof map.current.setFog === 'function') {
           map.current.setFog({
-            'range': [0.8, 8],
+            'range': [0.5, 10],
             'color': '#1a1a2e',
-            'horizon-blend': 0.05,
+            'horizon-blend': 0.1,
             'high-color': '#667eea',
             'space-color': '#0a0a1e',
-            'star-intensity': 0.5
+            'star-intensity': 0.6
           })
+          console.log('✅ Fog configured')
         }
       } catch (error) {
         console.log('Fog not supported')
       }
 
-      // Add ambient and directional lighting for 3D buildings
-      try {
-        if (typeof map.current.setLight === 'function') {
-          map.current.setLight({
-            anchor: 'viewport',
-            color: '#ffffff',
-            intensity: 0.4,
-            position: [1.5, 180, 80]
-          })
-        }
-      } catch (error) {
-        console.log('Lighting not supported')
-      }
-
-      console.log('✅ Effets 3D ajoutés')
+      console.log('✅ Style Standard configuré avec détails max')
 
       // Add trail source for movement trail
       map.current.addSource('trail', {
