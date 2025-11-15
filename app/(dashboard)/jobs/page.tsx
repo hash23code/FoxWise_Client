@@ -4,17 +4,19 @@ import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Search, Plus, Calendar, DollarSign, User, X, Edit, Trash2, Clock, Briefcase, MapPin, Filter } from 'lucide-react'
-import type { Job, Client, Activity, Employee } from '@/types'
+import type { Job, Client, Activity, Employee, EmployeeLocation } from '@/types'
 
 export default function JobsPage() {
   const mapContainer = useRef<HTMLDivElement | null>(null)
   const map = useRef<mapboxgl.Map | null>(null)
   const jobMarkers = useRef<mapboxgl.Marker[]>([])
+  const employeeMarkers = useRef<mapboxgl.Marker[]>([])
 
   const [jobs, setJobs] = useState<Job[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [employeeLocations, setEmployeeLocations] = useState<EmployeeLocation[]>([])
   const [loading, setLoading] = useState(true)
 
   // Filters
@@ -54,8 +56,28 @@ export default function JobsPage() {
     assigned_to: ''
   })
 
+  // Initial data fetch
   useEffect(() => {
     fetchData()
+  }, [])
+
+  // Poll jobs every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchJobs()
+    }, 10000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Poll employee locations every 10 seconds
+  useEffect(() => {
+    fetchEmployeeLocations()
+    const interval = setInterval(() => {
+      fetchEmployeeLocations()
+    }, 10000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const fetchData = async () => {
@@ -75,6 +97,28 @@ export default function JobsPage() {
       console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchJobs = async () => {
+    try {
+      const res = await fetch('/api/jobs')
+      if (res.ok) {
+        setJobs(await res.json())
+      }
+    } catch (error) {
+      console.error('Error fetching jobs:', error)
+    }
+  }
+
+  const fetchEmployeeLocations = async () => {
+    try {
+      const res = await fetch('/api/geolocation')
+      if (res.ok) {
+        setEmployeeLocations(await res.json())
+      }
+    } catch (error) {
+      console.error('Error fetching employee locations:', error)
     }
   }
 
@@ -164,6 +208,60 @@ export default function JobsPage() {
       jobMarkers.current.push(marker)
     })
   }, [jobs])
+
+  // Update employee markers on map
+  useEffect(() => {
+    if (!map.current) return
+
+    // Clear existing employee markers
+    employeeMarkers.current.forEach(marker => marker.remove())
+    employeeMarkers.current = []
+
+    // Add marker for each employee with location
+    employeeLocations.forEach(location => {
+      if (!location.latitude || !location.longitude) return
+
+      const employee = employees.find(e => e.id === location.user_id)
+      const employeeName = employee?.full_name || employee?.email || 'Employé'
+      const initials = employeeName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+
+      // Create marker element for employee
+      const el = document.createElement('div')
+      el.className = 'employee-marker'
+      el.style.cssText = `
+        width: 50px;
+        height: 50px;
+        cursor: pointer;
+        filter: drop-shadow(0 0 10px #a855f7);
+      `
+
+      el.innerHTML = `
+        <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="25" cy="25" r="22" fill="#a855f7" stroke="white" stroke-width="3"/>
+          <circle cx="25" cy="18" r="8" fill="white"/>
+          <path d="M 13 35 Q 13 28 25 28 Q 37 28 37 35 L 37 40 Q 37 45 25 45 Q 13 45 13 40 Z" fill="white"/>
+        </svg>
+      `
+
+      // Add popup with employee info
+      const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+        <div style="color: white; background: #1f2937; padding: 8px; border-radius: 4px;">
+          <strong>${employeeName}</strong><br/>
+          <span style="font-size: 12px; color: #9ca3af;">
+            Dernière mise à jour: ${new Date(location.updated_at).toLocaleTimeString('fr-FR')}
+          </span>
+        </div>
+      `)
+
+      // Create and add marker
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([location.longitude, location.latitude])
+        .setPopup(popup)
+        .addTo(map.current!)
+
+      employeeMarkers.current.push(marker)
+    })
+  }, [employeeLocations, employees])
 
   // Get unique sectors from clients
   const sectors = Array.from(new Set(clients.map(c => c.sector?.name).filter(Boolean))) as string[]
@@ -448,89 +546,96 @@ export default function JobsPage() {
         </select>
       </div>
 
-      {/* Main Content - Map and Jobs */}
+      {/* Map - Full Width at Top */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-6">
+        <div ref={mapContainer} className="w-full h-[600px]" />
+      </div>
+
+      {/* Jobs Lists - Side by Side */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
-        {/* Map */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div ref={mapContainer} className="w-full h-full min-h-[400px]" />
+        {/* Jobs Assignés - Left */}
+        <div className="flex flex-col overflow-hidden">
+          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <User className="w-5 h-5 text-orange-500" />
+            Jobs Assignés ({assignedJobs.length})
+          </h2>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {assignedJobs.length > 0 ? (
+              assignedJobs.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  employees={employees}
+                  onEdit={handleOpenModal}
+                  onDelete={handleDelete}
+                  getStatusColor={getStatusColor}
+                  getPriorityColor={getPriorityColor}
+                  getStatusLabel={getStatusLabel}
+                  getPriorityLabel={getPriorityLabel}
+                />
+              ))
+            ) : (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+                <div className="text-4xl mb-3">👤</div>
+                <p className="text-gray-400">Aucun job assigné</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Jobs List */}
-        <div className="flex flex-col gap-6 overflow-y-auto pr-2">
-          {/* Jobs Assignés */}
-          {assignedJobs.length > 0 && (
-            <div>
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <User className="w-5 h-5 text-orange-500" />
-                Jobs Assignés ({assignedJobs.length})
-              </h2>
-              <div className="space-y-4">
-                {assignedJobs.map((job) => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    employees={employees}
-                    onEdit={handleOpenModal}
-                    onDelete={handleDelete}
-                    getStatusColor={getStatusColor}
-                    getPriorityColor={getPriorityColor}
-                    getStatusLabel={getStatusLabel}
-                    getPriorityLabel={getPriorityLabel}
-                  />
-                ))}
+        {/* Jobs à Assigner - Right */}
+        <div className="flex flex-col overflow-hidden">
+          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <Filter className="w-5 h-5 text-yellow-500" />
+            Jobs à Assigner ({unassignedJobs.length})
+          </h2>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {unassignedJobs.length > 0 ? (
+              unassignedJobs.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  employees={employees}
+                  onEdit={handleOpenModal}
+                  onDelete={handleDelete}
+                  getStatusColor={getStatusColor}
+                  getPriorityColor={getPriorityColor}
+                  getStatusLabel={getStatusLabel}
+                  getPriorityLabel={getPriorityLabel}
+                />
+              ))
+            ) : (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+                <div className="text-4xl mb-3">✓</div>
+                <p className="text-gray-400">Tous les jobs sont assignés</p>
               </div>
-            </div>
-          )}
-
-          {/* Jobs à Assigner */}
-          {unassignedJobs.length > 0 && (
-            <div>
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <Filter className="w-5 h-5 text-yellow-500" />
-                Jobs à Assigner ({unassignedJobs.length})
-              </h2>
-              <div className="space-y-4">
-                {unassignedJobs.map((job) => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    employees={employees}
-                    onEdit={handleOpenModal}
-                    onDelete={handleDelete}
-                    getStatusColor={getStatusColor}
-                    getPriorityColor={getPriorityColor}
-                    getStatusLabel={getStatusLabel}
-                    getPriorityLabel={getPriorityLabel}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* No Results */}
-          {filteredJobs.length === 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-              <div className="text-6xl mb-4">📋</div>
-              <h2 className="text-2xl font-semibold text-white mb-2">
-                {jobs.length === 0 ? 'Aucun Job' : 'Aucun Résultat'}
-              </h2>
-              <p className="text-gray-400 mb-6">
-                {jobs.length === 0
-                  ? 'Commencez par créer votre premier job'
-                  : 'Essayez de modifier vos filtres de recherche'}
-              </p>
-              {jobs.length === 0 && (
-                <button
-                  onClick={() => handleOpenModal()}
-                  className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-orange-600 hover:to-red-700 transition-all"
-                >
-                  Créer votre premier job
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+
+      {/* No Results - Full Width */}
+      {filteredJobs.length === 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center mt-6">
+          <div className="text-6xl mb-4">📋</div>
+          <h2 className="text-2xl font-semibold text-white mb-2">
+            {jobs.length === 0 ? 'Aucun Job' : 'Aucun Résultat'}
+          </h2>
+          <p className="text-gray-400 mb-6">
+            {jobs.length === 0
+              ? 'Commencez par créer votre premier job'
+              : 'Essayez de modifier vos filtres de recherche'}
+          </p>
+          {jobs.length === 0 && (
+            <button
+              onClick={() => handleOpenModal()}
+              className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-orange-600 hover:to-red-700 transition-all"
+            >
+              Créer votre premier job
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Modal */}
       {showModal && (
