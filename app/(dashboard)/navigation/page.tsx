@@ -1,498 +1,852 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import dynamic from 'next/dynamic'
-import { MapPin, List, AlertCircle, CheckCircle, Clock, X, ChevronRight } from 'lucide-react'
-import type { Job } from '@/types'
-
-const NavigationMap = dynamic(() => import('@/components/NavigationMapSimple'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full bg-gray-950">
-      <div className="text-white text-xl">Chargement de la carte...</div>
-    </div>
-  )
-})
+import { useEffect, useRef, useState } from 'react'
+import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 
 export default function NavigationPage() {
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string>('')
-  const [mapboxApiKey, setMapboxApiKey] = useState('')
-  const [showJobList, setShowJobList] = useState(false)
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [debugInfo, setDebugInfo] = useState<string[]>([])
-  const [freeRideMode, setFreeRideMode] = useState(false)
-  const [newJobNotification, setNewJobNotification] = useState<Job | null>(null)
-  const [previousJobCount, setPreviousJobCount] = useState(0)
+  const mapContainer = useRef<HTMLDivElement | null>(null)
+  const map = useRef<mapboxgl.Map | null>(null)
+  const userMarker = useRef<mapboxgl.Marker | null>(null)
+  const [speed, setSpeed] = useState(0)
+  const [heading, setHeading] = useState(0)
+  const [altitude, setAltitude] = useState(0)
+  const [currentPosition, setCurrentPosition] = useState<{ longitude: number; latitude: number; heading: number } | null>(null)
+  const [viewMode, setViewMode] = useState<'immersive' | 'overhead'>('immersive')
+  const [followGPS, setFollowGPS] = useState(true) // Track if we should follow GPS or free roam
+  const [distanceTraveled, setDistanceTraveled] = useState(0)
+  const [sessionStart] = useState(Date.now())
+  const [maxSpeed, setMaxSpeed] = useState(0)
+  const lastPosition = useRef<{ lng: number; lat: number } | null>(null)
+  const trail = useRef<Array<[number, number]>>([])
+  const [weather, setWeather] = useState<'clear' | 'rain' | 'snow'>('clear')
 
-  const addDebug = (msg: string) => {
-    console.log('[Navigation]', msg)
-    setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`])
-  }
-
+  // Initialize map ONCE
   useEffect(() => {
-    addDebug('Starting initialization...')
+    // Initialize map only once
+    if (map.current) return
 
-    const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || ''
-    addDebug(`API Key: ${apiKey ? 'Present' : 'Missing'}`)
-    setMapboxApiKey(apiKey)
-
+    // Get API key
+    const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY
     if (!apiKey) {
-      setError('Clé API Mapbox manquante')
-      setLoading(false)
+      console.error('❌ NO API KEY')
       return
     }
 
-    fetchJobs()
+    console.log('✅ API Key présente')
+    mapboxgl.accessToken = apiKey
 
-    // Poll for new jobs every 10 seconds
-    const pollInterval = setInterval(() => {
-      fetchJobs()
-    }, 10000)
+    // Create map with Mapbox Standard style (richest 3D experience)
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current!,
+      style: 'mapbox://styles/mapbox/standard',
+      center: [-73.5673, 45.5017], // Montreal
+      zoom: 17,
+      pitch: 70, // Inclinaison 3D immersive
+      bearing: 0,
+      antialias: true
+    })
 
+    console.log('✅ Map 3D créée')
+
+    // When map loads, configure Standard style for maximum detail
+    map.current.on('style.load', () => {
+      if (!map.current) return
+
+      console.log('✅ Map chargée, configuration du style Standard...')
+
+      // Configure Standard style lighting for dusk/night atmosphere
+      try {
+        map.current.setConfigProperty('basemap', 'lightPreset', 'dusk')
+        console.log('✅ Lighting preset: dusk')
+      } catch (error) {
+        console.log('Config property not supported')
+      }
+
+      // Enable 3D buildings and landmarks (already included in Standard)
+      try {
+        map.current.setConfigProperty('basemap', 'show3dObjects', true)
+        console.log('✅ 3D objects enabled')
+      } catch (error) {
+        console.log('3D objects config not supported')
+      }
+
+      // Add enhanced fog for depth perception
+      try {
+        if (typeof map.current.setFog === 'function') {
+          map.current.setFog({
+            'range': [0.5, 10],
+            'color': '#1a1a2e',
+            'horizon-blend': 0.1,
+            'high-color': '#667eea',
+            'space-color': '#0a0a1e',
+            'star-intensity': 0.6
+          })
+          console.log('✅ Fog configured')
+        }
+      } catch (error) {
+        console.log('Fog not supported')
+      }
+
+      console.log('✅ Style Standard configuré avec détails max')
+
+      // Add trail source for movement trail
+      map.current.addSource('trail', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      })
+
+      // Add trail layer with gradient effect
+      map.current.addLayer({
+        id: 'trail-line',
+        type: 'line',
+        source: 'trail',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': [
+            'interpolate',
+            ['linear'],
+            ['line-progress'],
+            0, '#667eea',
+            0.5, '#10b981',
+            1, '#f59e0b'
+          ],
+          'line-width': 6,
+          'line-opacity': 0.8,
+          'line-gradient': [
+            'interpolate',
+            ['linear'],
+            ['line-progress'],
+            0, 'rgba(102, 126, 234, 0.2)',
+            0.5, 'rgba(16, 185, 129, 0.6)',
+            1, 'rgba(245, 158, 11, 1)'
+          ]
+        }
+      })
+
+      // Add pulsing circle around user position
+      map.current.addSource('user-pulse', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'Point',
+            coordinates: [-73.5673, 45.5017]
+          }
+        }
+      })
+
+      map.current.addLayer({
+        id: 'user-pulse-layer',
+        type: 'circle',
+        source: 'user-pulse',
+        paint: {
+          'circle-radius': 30,
+          'circle-color': '#10b981',
+          'circle-opacity': 0.3,
+          'circle-blur': 0.8
+        }
+      })
+    })
+
+    // Detect manual map movement (stop GPS follow when user pans)
+    map.current.on('dragstart', () => {
+      setFollowGPS(false)
+      console.log('🖐️ Free roam mode - GPS tracking paused')
+    })
+
+    // Create custom marker for user position
+    const el = document.createElement('div')
+    el.className = 'user-marker'
+    el.style.cssText = `
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: 4px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 40px rgba(102, 126, 234, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      animation: userPulse 2s infinite;
+      cursor: pointer;
+    `
+    el.innerHTML = '🏎️'
+
+    userMarker.current = new mapboxgl.Marker(el)
+      .setLngLat([-73.5673, 45.5017])
+      .addTo(map.current)
+
+    // Track GPS position
     if (navigator.geolocation) {
-      addDebug('Geolocation available, requesting permission...')
+      console.log('✅ GPS disponible')
 
-      const watchId = navigator.geolocation.watchPosition(
+      navigator.geolocation.watchPosition(
         (position) => {
-          const lat = position.coords.latitude
-          const lng = position.coords.longitude
-          addDebug(`Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`)
-          setUserLocation({ lat, lng })
-          updateEmployeeLocation(lat, lng, position.coords.heading || 0, position.coords.speed || 0)
-          checkProximity(lat, lng)
+          const { longitude, latitude, speed: gpsSpeed, heading: gpsHeading, altitude: gpsAltitude } = position.coords
+          console.log(`📍 Position: ${latitude}, ${longitude}`)
+
+          const currentSpeed = gpsSpeed ? gpsSpeed * 3.6 : 0
+
+          // Update stats
+          setSpeed(currentSpeed)
+          setHeading(gpsHeading || 0)
+          setAltitude(gpsAltitude || 0)
+
+          // Track max speed
+          if (currentSpeed > maxSpeed) {
+            setMaxSpeed(currentSpeed)
+          }
+
+          // Calculate distance traveled
+          if (lastPosition.current) {
+            const R = 6371 // Earth radius in km
+            const dLat = (latitude - lastPosition.current.lat) * Math.PI / 180
+            const dLon = (longitude - lastPosition.current.lng) * Math.PI / 180
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lastPosition.current.lat * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            const distance = R * c
+            setDistanceTraveled(prev => prev + distance)
+          }
+          lastPosition.current = { lng: longitude, lat: latitude }
+
+          // Update trail
+          trail.current.push([longitude, latitude])
+          if (trail.current.length > 100) {
+            trail.current.shift() // Keep only last 100 points
+          }
+
+          // Update marker position
+          if (userMarker.current) {
+            userMarker.current.setLngLat([longitude, latitude])
+          }
+
+          // Update pulse circle
+          if (map.current?.getSource('user-pulse')) {
+            (map.current.getSource('user-pulse') as mapboxgl.GeoJSONSource).setData({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'Point',
+                coordinates: [longitude, latitude]
+              }
+            })
+          }
+
+          // Update trail line
+          if (map.current?.getSource('trail') && trail.current.length > 1) {
+            (map.current.getSource('trail') as mapboxgl.GeoJSONSource).setData({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: trail.current
+              }
+            })
+          }
+
+          // Store current position
+          setCurrentPosition({ longitude, latitude, heading: gpsHeading || 0 })
         },
         (error) => {
-          // Don't block the app if geolocation times out - just log it
-          addDebug(`Geolocation warning: ${error.message} (code: ${error.code})`)
-          console.warn('Geolocation error (non-blocking):', error)
-          // Don't set error state or stop loading - continue anyway
+          console.error('❌ GPS error:', error.message)
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 10000, // Allow 10s old positions
-          timeout: 30000 // Increase timeout to 30s
+          timeout: 10000,
+          maximumAge: 5000
         }
       )
-
-      return () => {
-        clearInterval(pollInterval)
-        if (watchId) {
-          addDebug('Cleaning up geolocation watch')
-          navigator.geolocation.clearWatch(watchId)
-        }
-      }
     } else {
-      addDebug('Geolocation NOT available - continuing without GPS')
-      // Don't block the app - just continue without GPS
+      console.error('❌ GPS non supporté')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
-  const fetchJobs = async () => {
-    try {
-      addDebug('Fetching jobs...')
-      const res = await fetch('/api/jobs')
-      if (res.ok) {
-        const data = await res.json()
-        addDebug(`Received ${data.length} jobs`)
-        const assignedJobs = data.filter(
-          (job: Job) => job.assigned_to && job.status !== 'cancelled' && job.status !== 'completed'
-        )
-        addDebug(`${assignedJobs.length} assigned jobs`)
-
-        // Check for new jobs and show notification
-        if (previousJobCount > 0 && assignedJobs.length > previousJobCount) {
-          const newJob = assignedJobs[0] // Assume newest job is first
-          setNewJobNotification(newJob)
-          addDebug(`🚨 NEW JOB ASSIGNED: ${newJob.title}`)
-
-          // Auto-dismiss notification after 5 seconds
-          setTimeout(() => setNewJobNotification(null), 5000)
-        }
-
-        setPreviousJobCount(assignedJobs.length)
-        setJobs(assignedJobs)
-
-        // If no jobs or current job has no coordinates, enable free ride mode
-        if (assignedJobs.length === 0 || (assignedJobs[0] && !assignedJobs[0].latitude)) {
-          setFreeRideMode(true)
-          addDebug('Free ride mode enabled')
-        }
-
-        if (!selectedJob && assignedJobs.length > 0) {
-          const job = assignedJobs[0]
-          setSelectedJob(job)
-          addDebug(`Selected job: ${job.title}`)
-          addDebug(`Job has coordinates: ${job.latitude ? 'YES' : 'NO'} (lat: ${job.latitude}, lng: ${job.longitude})`)
-          addDebug(`Client address: ${job.client?.address || 'N/A'}`)
-
-          // If job has coordinates, disable free ride mode
-          if (job.latitude && job.longitude) {
-            setFreeRideMode(false)
-          }
-        }
-      } else {
-        addDebug(`Failed to fetch jobs: ${res.status}`)
-      }
-    } catch (error: any) {
-      addDebug(`Error fetching jobs: ${error.message}`)
-      console.error('Error fetching jobs:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updateEmployeeLocation = useCallback(async (lat: number, lng: number, heading: number, speed: number) => {
-    try {
-      await fetch('/api/geolocation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          latitude: lat,
-          longitude: lng,
-          heading,
-          speed: speed * 3.6,
-          accuracy: 10
-        })
-      })
-    } catch (error) {
-      console.error('Error updating location:', error)
+    // Cleanup
+    return () => {
+      map.current?.remove()
     }
   }, [])
 
-  const checkProximity = async (lat: number, lng: number) => {
-    try {
-      const res = await fetch('/api/jobs/location', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          latitude: lat,
-          longitude: lng,
-          threshold: 50
-        })
-      })
+  // Handle view mode changes - stay at current map center
+  useEffect(() => {
+    if (!map.current) return
 
-      if (res.ok) {
-        const data = await res.json()
-        if (data.updated > 0) {
-          addDebug(`${data.updated} jobs updated (proximity)`)
-          await fetchJobs()
+    // Get current center of the map (wherever user is looking)
+    const currentCenter = map.current.getCenter()
+    const currentBearing = map.current.getBearing()
+
+    if (viewMode === 'immersive') {
+      map.current.easeTo({
+        center: [currentCenter.lng, currentCenter.lat] as [number, number],
+        zoom: 19, // Très proche
+        pitch: 85, // Maximum pitch pour effet immersif
+        bearing: currentBearing, // Keep current rotation
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    } else {
+      map.current.easeTo({
+        center: [currentCenter.lng, currentCenter.lat] as [number, number],
+        zoom: 15, // Plus éloigné
+        pitch: 0, // Vue de haut
+        bearing: 0, // North up
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    }
+  }, [viewMode])
+
+  // Update camera to follow GPS position (only if followGPS is true)
+  useEffect(() => {
+    if (!map.current || !currentPosition || !followGPS) return
+
+    const { longitude, latitude, heading } = currentPosition
+
+    if (viewMode === 'immersive') {
+      map.current.easeTo({
+        center: [longitude, latitude] as [number, number],
+        zoom: 19,
+        pitch: 85,
+        bearing: heading,
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    } else {
+      map.current.easeTo({
+        center: [longitude, latitude] as [number, number],
+        zoom: 15,
+        pitch: 0,
+        bearing: 0,
+        duration: 1000,
+        easing: (t: number) => t
+      })
+    }
+  }, [currentPosition, viewMode, followGPS])
+
+  // Update weather/precipitation effects using real Mapbox API
+  useEffect(() => {
+    if (!map.current) return
+
+    try {
+      const mapAny = map.current as any
+
+      if (weather === 'rain') {
+        // Clear snow first if it was active
+        if (typeof mapAny.setSnow === 'function') {
+          mapAny.setSnow(null)
         }
-      }
-    } catch (error) {
-      console.error('Error checking proximity:', error)
-    }
-  }
-
-  const handleArrival = useCallback(async () => {
-    if (!selectedJob) return
-
-    try {
-      await fetch('/api/jobs/location', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobId: selectedJob.id,
-          location_status: 'arrived'
-        })
-      })
-
-      await fetchJobs()
-    } catch (error) {
-      console.error('Error marking arrival:', error)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedJob])
-
-  const handleComplete = async (jobId: string) => {
-    try {
-      await fetch('/api/jobs/location', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobId,
-          location_status: 'completed'
-        })
-      })
-
-      await fetchJobs()
-
-      const remainingJobs = jobs.filter(j => j.id !== jobId)
-      if (remainingJobs.length > 0) {
-        setSelectedJob(remainingJobs[0])
+        // Set rain with official Mapbox API
+        if (typeof mapAny.setRain === 'function') {
+          mapAny.setRain({
+            density: 0.8,
+            intensity: 1.0,
+            color: '#a8adbc',
+            opacity: 0.7,
+            vignette: 1.0,
+            'vignette-color': '#464646',
+            direction: [0, 80],
+            'droplet-size': [2.6, 18.2],
+            'distortion-strength': 0.7,
+            'center-thinning': 0
+          })
+          console.log('✅ Rain enabled')
+        }
+      } else if (weather === 'snow') {
+        // Clear rain first if it was active
+        if (typeof mapAny.setRain === 'function') {
+          mapAny.setRain(null)
+        }
+        // Set snow with official Mapbox API
+        if (typeof mapAny.setSnow === 'function') {
+          mapAny.setSnow({
+            density: 0.85,
+            intensity: 1.0,
+            'center-thinning': 0.1,
+            direction: [0, 50],
+            opacity: 1.0,
+            color: '#ffffff',
+            'flake-size': 0.71,
+            vignette: 0.3,
+            'vignette-color': '#ffffff'
+          })
+          console.log('✅ Snow enabled')
+        }
       } else {
-        setSelectedJob(null)
+        // Clear both rain and snow
+        if (typeof mapAny.setRain === 'function') {
+          mapAny.setRain(null)
+        }
+        if (typeof mapAny.setSnow === 'function') {
+          mapAny.setSnow(null)
+        }
+        console.log('✅ Weather cleared')
       }
-
-      setShowJobList(false)
     } catch (error) {
-      console.error('Error completing job:', error)
+      console.log('❌ Weather effects error:', error)
     }
-  }
+  }, [weather])
 
-  const handleSelectJob = (job: Job) => {
-    addDebug(`Job selected: ${job.title}`)
-    setSelectedJob(job)
-    setShowJobList(false)
-  }
+  // Calculate session time
+  const sessionTime = Math.floor((Date.now() - sessionStart) / 1000)
+  const minutes = Math.floor(sessionTime / 60)
+  const seconds = sessionTime % 60
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-      case 'arrived':
-        return 'text-green-400 bg-green-500/20'
-      case 'en_route':
-        return 'text-blue-400 bg-blue-500/20'
-      case 'assigned':
-        return 'text-orange-400 bg-orange-500/20'
-      default:
-        return 'text-gray-400 bg-gray-500/20'
-    }
-  }
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      pending: 'En attente',
-      assigned: 'Assigné',
-      en_route: 'En route',
-      arrived: 'Arrivé',
-      completed: 'Complété'
-    }
-    return labels[status] || status
-  }
-
-  // Debug panel toggle
-  const [showDebug, setShowDebug] = useState(false)
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-950 p-4">
-        <div className="text-white text-xl mb-4">Chargement de la navigation...</div>
-        <div className="text-gray-400 text-sm">{debugInfo[debugInfo.length - 1]}</div>
-        <button
-          onClick={() => setShowDebug(!showDebug)}
-          className="mt-4 text-xs text-gray-500 hover:text-gray-300"
-        >
-          {showDebug ? 'Masquer' : 'Afficher'} les détails
-        </button>
-        {showDebug && (
-          <div className="mt-4 bg-black/50 p-4 rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
-            <div className="text-xs font-mono text-green-400 space-y-1">
-              {debugInfo.map((msg, i) => (
-                <div key={i}>{msg}</div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-950">
-        <div className="bg-red-500/20 border border-red-500 rounded-xl p-6 max-w-md mx-4">
-          <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Erreur</h2>
-          <p className="text-gray-300 text-sm mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600"
-          >
-            Réessayer
-          </button>
-          <details className="mt-4">
-            <summary className="text-xs text-gray-400 cursor-pointer">Logs de débogage</summary>
-            <div className="mt-2 bg-black/50 p-2 rounded text-xs font-mono text-green-400 max-h-40 overflow-y-auto">
-              {debugInfo.map((msg, i) => (
-                <div key={i}>{msg}</div>
-              ))}
-            </div>
-          </details>
-        </div>
-      </div>
-    )
-  }
-
-  if (!mapboxApiKey) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-950">
-        <div className="bg-red-500/20 border border-red-500 rounded-xl p-6 max-w-md mx-4">
-          <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Clé API Mapbox manquante</h2>
-          <p className="text-gray-300 text-sm">
-            Veuillez ajouter votre clé API Mapbox dans les variables d&apos;environnement Vercel
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Calculate speedometer angle (0-200 km/h mapped to -135° to 135°)
+  const speedAngle = -135 + (Math.min(speed, 200) / 200) * 270
 
   return (
-    <div className="h-full flex relative overflow-hidden bg-gray-950">
-      {/* Debug button */}
-      <button
-        onClick={() => setShowDebug(!showDebug)}
-        className="absolute top-4 right-4 z-50 bg-black/80 text-white px-2 py-1 rounded text-xs"
-      >
-        Debug
-      </button>
-
-      {showDebug && (
-        <div className="absolute top-16 right-4 z-50 bg-black/90 p-4 rounded-lg max-w-md max-h-96 overflow-y-auto">
-          <div className="text-xs font-mono text-green-400 space-y-1">
-            {debugInfo.map((msg, i) => (
-              <div key={i}>{msg}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Burger Menu Button */}
-      <button
-        onClick={() => setShowJobList(!showJobList)}
-        className="absolute top-4 left-4 z-50 bg-black/80 backdrop-blur-xl text-white p-3 rounded-xl border border-white/20 hover:bg-black/90 transition-all shadow-2xl"
-        aria-label="Toggle job list"
-      >
-        {showJobList ? <X className="w-6 h-6" /> : <List className="w-6 h-6" />}
-      </button>
-
-      {/* Job List Sidebar */}
+    <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative', overflow: 'hidden' }}>
+      {/* Map Container */}
       <div
-        className={`
-          fixed inset-y-0 left-0 z-40 w-full sm:w-96
-          bg-gray-950/95 backdrop-blur-xl border-r border-gray-800
-          transform transition-transform duration-300 ease-in-out
-          ${showJobList ? 'translate-x-0' : '-translate-x-full'}
-        `}
-      >
-        <div className="flex flex-col h-full">
-          <div className="p-4 border-b border-gray-800 bg-gray-900/50">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-bold text-white">Mes Jobs</h2>
-              <button
-                onClick={() => setShowJobList(false)}
-                className="sm:hidden p-2 text-gray-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-gray-400 text-sm">{jobs.length} job{jobs.length > 1 ? 's' : ''} assigné{jobs.length > 1 ? 's' : ''}</p>
+        ref={mapContainer}
+        style={{ width: '100%', height: '100%' }}
+      />
+
+      {/* Speed Effect - Motion blur lines when moving fast */}
+      {speed > 50 && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 997,
+          background: `repeating-linear-gradient(
+            ${heading}deg,
+            transparent 0px,
+            rgba(255,255,255,${Math.min(speed / 500, 0.2)}) 1px,
+            transparent 2px,
+            transparent 100px
+          )`,
+          animation: 'speedLines 0.1s linear infinite'
+        }} />
+      )}
+
+      {/* Circular Speedometer - Bottom Left */}
+      <div style={{
+        position: 'absolute',
+        bottom: 30,
+        left: 30,
+        width: '180px',
+        height: '180px',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        borderRadius: '50%',
+        border: '3px solid rgba(102, 126, 234, 0.5)',
+        boxShadow: '0 0 40px rgba(102, 126, 234, 0.3), inset 0 0 30px rgba(0,0,0,0.5)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        {/* Speed arc background */}
+        <svg width="180" height="180" style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
+          <circle cx="90" cy="90" r="70" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="12" />
+          <circle
+            cx="90"
+            cy="90"
+            r="70"
+            fill="none"
+            stroke="url(#speedGradient)"
+            strokeWidth="12"
+            strokeDasharray={`${(Math.min(speed, 200) / 200) * 440} 440`}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.3s ease' }}
+          />
+          <defs>
+            <linearGradient id="speedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="50%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#ef4444" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        {/* Speed value */}
+        <div style={{ textAlign: 'center', zIndex: 1 }}>
+          <div style={{
+            color: 'white',
+            fontSize: '48px',
+            fontWeight: 'bold',
+            fontFamily: 'monospace',
+            textShadow: '0 0 20px rgba(16, 185, 129, 0.8)',
+            lineHeight: 1
+          }}>
+            {speed.toFixed(0)}
           </div>
+          <div style={{ color: '#10b981', fontSize: '14px', fontWeight: 'bold', marginTop: '5px' }}>
+            KM/H
+          </div>
+          <div style={{ color: '#6b7280', fontSize: '10px', marginTop: '2px' }}>
+            MAX: {maxSpeed.toFixed(0)}
+          </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {jobs.map((job, index) => (
-              <button
-                key={job.id}
-                onClick={() => handleSelectJob(job)}
-                className={`w-full text-left bg-gray-800/50 border rounded-xl p-4 transition-all ${
-                  selectedJob?.id === job.id
-                    ? 'border-orange-500 shadow-lg shadow-orange-500/20 bg-gray-800'
-                    : 'border-gray-700 hover:border-gray-600 hover:bg-gray-800/70'
-                }`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="bg-gray-700 text-white font-bold rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
-                      {index + 1}
-                    </span>
-                    <h3 className="font-semibold text-white truncate">{job.title}</h3>
-                  </div>
-                  {job.is_urgent && (
-                    <span className="bg-red-500 text-white px-2 py-0.5 rounded text-xs font-bold animate-pulse ml-2 flex-shrink-0">
-                      URGENT
-                    </span>
-                  )}
-                </div>
+        {/* Speedometer needle */}
+        <div style={{
+          position: 'absolute',
+          width: '2px',
+          height: '60px',
+          background: 'linear-gradient(to bottom, #ef4444, transparent)',
+          transformOrigin: 'bottom center',
+          transform: `rotate(${speedAngle}deg)`,
+          transition: 'transform 0.3s ease',
+          bottom: '90px',
+          left: '89px',
+          filter: 'drop-shadow(0 0 5px #ef4444)'
+        }} />
+      </div>
 
-                {job.description && (
-                  <p className="text-gray-400 text-sm mb-2 line-clamp-2">{job.description}</p>
-                )}
+      {/* Compass Rose - Bottom Right */}
+      <div style={{
+        position: 'absolute',
+        bottom: 30,
+        right: 30,
+        width: '120px',
+        height: '120px',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        borderRadius: '50%',
+        border: '3px solid rgba(59, 130, 246, 0.5)',
+        boxShadow: '0 0 40px rgba(59, 130, 246, 0.3), inset 0 0 30px rgba(0,0,0,0.5)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        {/* Compass background */}
+        <div style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          transform: `rotate(${-heading}deg)`,
+          transition: 'transform 0.5s ease'
+        }}>
+          {/* Cardinal directions */}
+          <div style={{ position: 'absolute', top: '5px', left: '50%', transform: 'translateX(-50%)', color: '#ef4444', fontSize: '20px', fontWeight: 'bold' }}>N</div>
+          <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontSize: '16px' }}>E</div>
+          <div style={{ position: 'absolute', bottom: '5px', left: '50%', transform: 'translateX(-50%)', color: '#6b7280', fontSize: '16px' }}>S</div>
+          <div style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontSize: '16px' }}>W</div>
+        </div>
 
-                <div className="flex items-center gap-2 mb-2 text-sm">
-                  <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <span className="text-gray-400 truncate">
-                    {job.client?.address || 'Adresse non définie'}
-                  </span>
-                </div>
+        {/* Compass needle */}
+        <div style={{
+          position: 'absolute',
+          width: '4px',
+          height: '50px',
+          background: 'linear-gradient(to bottom, #ef4444, #3b82f6)',
+          clipPath: 'polygon(50% 0%, 100% 100%, 50% 85%, 0% 100%)',
+          filter: 'drop-shadow(0 0 10px #ef4444)'
+        }} />
 
-                {job.scheduled_date && (
-                  <div className="flex items-center gap-2 mb-3 text-sm">
-                    <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <span className="text-gray-400">
-                      {new Date(job.scheduled_date).toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-                )}
+        {/* Heading value */}
+        <div style={{
+          position: 'absolute',
+          bottom: '15px',
+          fontSize: '12px',
+          color: 'white',
+          fontWeight: 'bold',
+          fontFamily: 'monospace'
+        }}>
+          {heading.toFixed(0)}°
+        </div>
+      </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-gray-700">
-                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(job.location_status)}`}>
-                    {getStatusLabel(job.location_status)}
-                  </span>
-
-                  {job.location_status === 'arrived' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleComplete(job.id)
-                      }}
-                      className="bg-green-500 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-green-600 transition-colors"
-                    >
-                      Compléter
-                    </button>
-                  )}
-
-                  {selectedJob?.id === job.id && (
-                    <ChevronRight className="w-5 h-5 text-orange-500" />
-                  )}
-                </div>
-              </button>
-            ))}
+      {/* Session Stats - Top Left */}
+      <div style={{
+        position: 'absolute',
+        top: 20,
+        left: 20,
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        padding: '15px 20px',
+        borderRadius: '20px',
+        border: '2px solid rgba(102, 126, 234, 0.3)',
+        boxShadow: '0 0 30px rgba(102, 126, 234, 0.2)',
+        zIndex: 1000,
+        minWidth: '200px'
+      }}>
+        <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
+          📊 Session
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Distance</span>
+            <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+              {distanceTraveled.toFixed(2)} km
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Temps</span>
+            <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+              {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Altitude</span>
+            <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+              {altitude.toFixed(0)}m
+            </span>
           </div>
         </div>
       </div>
 
-      {showJobList && (
-        <div
-          className="fixed inset-0 bg-black/50 z-30 sm:hidden"
-          onClick={() => setShowJobList(false)}
-        />
-      )}
-
-      {/* Map Container - Simple version for testing */}
-      <div className="flex-1 relative">
-        <NavigationMap apiKey={mapboxApiKey} />
+      {/* Weather Toggle - Top Center */}
+      <div style={{
+        position: 'absolute',
+        top: 20,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(30px)',
+        padding: '10px',
+        borderRadius: '15px',
+        border: '2px solid rgba(255, 255, 255, 0.1)',
+        zIndex: 1000,
+        display: 'flex',
+        gap: '10px'
+      }}>
+        <button
+          onClick={() => setWeather('clear')}
+          style={{
+            background: weather === 'clear' ? 'rgba(102, 126, 234, 0.5)' : 'transparent',
+            border: weather === 'clear' ? '2px solid #667eea' : '2px solid transparent',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            color: 'white',
+            fontSize: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          ☀️
+        </button>
+        <button
+          onClick={() => setWeather('rain')}
+          style={{
+            background: weather === 'rain' ? 'rgba(59, 130, 246, 0.5)' : 'transparent',
+            border: weather === 'rain' ? '2px solid #3b82f6' : '2px solid transparent',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            color: 'white',
+            fontSize: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          🌧️
+        </button>
+        <button
+          onClick={() => setWeather('snow')}
+          style={{
+            background: weather === 'snow' ? 'rgba(156, 163, 175, 0.5)' : 'transparent',
+            border: weather === 'snow' ? '2px solid #9ca3af' : '2px solid transparent',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            color: 'white',
+            fontSize: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          ❄️
+        </button>
       </div>
 
-      {/* New Job Notification */}
-      {newJobNotification && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
-          <div className="bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-2xl p-4 border-2 border-orange-300 shadow-2xl max-w-sm">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-full">
-                <MapPin className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <div className="font-bold text-base">Nouveau Job Assigné!</div>
-                <div className="text-sm opacity-90">{newJobNotification.title}</div>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectedJob(newJobNotification)
-                  setNewJobNotification(null)
-                  setFreeRideMode(false)
-                }}
-                className="bg-white text-orange-600 px-3 py-1 rounded-lg font-semibold text-sm hover:bg-gray-100"
-              >
-                Voir
-              </button>
-            </div>
+      {/* View Mode Toggle - Top Right */}
+      <div style={{
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}>
+        <button
+          onClick={() => setViewMode(viewMode === 'immersive' ? 'overhead' : 'immersive')}
+          style={{
+            background: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(20px)',
+            padding: '15px 25px',
+            borderRadius: '15px',
+            border: '2px solid rgba(255, 255, 255, 0.2)',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          <div style={{ fontSize: '24px' }}>
+            {viewMode === 'immersive' ? '🚁' : '🏎️'}
           </div>
+          <div>
+            {viewMode === 'immersive' ? 'VUE DE HAUT' : 'VUE IMMERSIVE'}
+          </div>
+        </button>
+
+        {/* Re-center to GPS button - only show when not following GPS */}
+        {!followGPS && (
+          <button
+            onClick={() => setFollowGPS(true)}
+            style={{
+              background: 'rgba(16, 185, 129, 0.9)',
+              backdropFilter: 'blur(20px)',
+              padding: '15px 25px',
+              borderRadius: '15px',
+              border: '2px solid rgba(16, 185, 129, 0.5)',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '14px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '5px',
+              animation: 'pulse 2s infinite'
+            }}
+          >
+            <div style={{ fontSize: '24px' }}>📍</div>
+            <div>RETOUR GPS</div>
+          </button>
+        )}
+      </div>
+
+      {/* Status Badge - Bottom Center */}
+      <div style={{
+        position: 'absolute',
+        bottom: 30,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: followGPS ? 'rgba(16, 185, 129, 0.9)' : 'rgba(234, 179, 8, 0.9)',
+        backdropFilter: 'blur(30px)',
+        padding: '12px 25px',
+        borderRadius: '20px',
+        border: followGPS ? '2px solid rgba(16, 185, 129, 0.5)' : '2px solid rgba(234, 179, 8, 0.5)',
+        boxShadow: followGPS ? '0 0 30px rgba(16, 185, 129, 0.3)' : '0 0 30px rgba(234, 179, 8, 0.3)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <div style={{
+          width: '12px',
+          height: '12px',
+          borderRadius: '50%',
+          background: followGPS ? '#10b981' : '#eab308',
+          animation: 'pulse 2s infinite',
+          boxShadow: followGPS ? '0 0 15px #10b981' : '0 0 15px #eab308'
+        }} />
+        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+          {followGPS
+            ? (viewMode === 'immersive' ? '🏎️ GPS IMMERSIF' : '🗺️ GPS CARTE')
+            : '🖐️ FREE ROAM'}
         </div>
-      )}
+      </div>
+
+      {/* Gradient Overlays for depth */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.3) 0%, transparent 30%)',
+        pointerEvents: 'none',
+        zIndex: 999
+      }} />
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, transparent 20%)',
+        pointerEvents: 'none',
+        zIndex: 999
+      }} />
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.5;
+            transform: scale(1.2);
+          }
+        }
+
+        @keyframes userPulse {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 40px rgba(102, 126, 234, 0.4);
+          }
+          50% {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(102, 126, 234, 1), 0 0 60px rgba(102, 126, 234, 0.6);
+          }
+        }
+
+        @keyframes speedLines {
+          0% {
+            opacity: 0.8;
+          }
+          100% {
+            opacity: 0.3;
+          }
+        }
+
+        @keyframes glow {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5), 0 0 40px rgba(102, 126, 234, 0.3), inset 0 0 20px rgba(102, 126, 234, 0.1);
+          }
+          50% {
+            box-shadow: 0 0 30px rgba(102, 126, 234, 0.8), 0 0 60px rgba(102, 126, 234, 0.5), inset 0 0 30px rgba(102, 126, 234, 0.2);
+          }
+        }
+
+        @keyframes float {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-10px);
+          }
+        }
+
+        /* Custom scrollbar for stats */
+        ::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: rgba(102, 126, 234, 0.5);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(102, 126, 234, 0.8);
+        }
+      `}</style>
     </div>
   )
 }
