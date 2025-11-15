@@ -166,26 +166,44 @@ export default function NavigationPage() {
       console.log('🖐️ Free roam mode - GPS tracking paused')
     })
 
-    // Create custom marker for user position
+    // Create custom triangle marker for user position
     const el = document.createElement('div')
     el.className = 'user-marker'
     el.style.cssText = `
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: 4px solid white;
-      border-radius: 50%;
-      box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 40px rgba(102, 126, 234, 0.4);
+      width: 50px;
+      height: 50px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      animation: userPulse 2s infinite;
       cursor: pointer;
+      filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.8)) drop-shadow(0 0 20px rgba(16, 185, 129, 0.4));
     `
-    el.innerHTML = '🏎️'
 
-    userMarker.current = new mapboxgl.Marker(el)
+    // SVG triangle that points in direction of movement
+    el.innerHTML = `
+      <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="triangleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <!-- Triangle pointing up (north) -->
+        <path d="M 25 5 L 45 40 L 25 35 L 5 40 Z"
+              fill="url(#triangleGradient)"
+              stroke="white"
+              stroke-width="2.5"
+              stroke-linejoin="round"/>
+        <!-- Center dot -->
+        <circle cx="25" cy="25" r="3" fill="white" opacity="0.9"/>
+      </svg>
+    `
+
+    userMarker.current = new mapboxgl.Marker({
+      element: el,
+      rotationAlignment: 'map',
+      pitchAlignment: 'map'
+    })
       .setLngLat([-73.5673, 45.5017])
       .addTo(map.current)
 
@@ -230,9 +248,13 @@ export default function NavigationPage() {
             trail.current.shift() // Keep only last 100 points
           }
 
-          // Update marker position
+          // Update marker position and rotation
           if (userMarker.current) {
             userMarker.current.setLngLat([longitude, latitude])
+            // Rotate triangle to point in direction of movement
+            if (gpsHeading !== null && gpsHeading !== undefined) {
+              userMarker.current.setRotation(gpsHeading)
+            }
           }
 
           // Update pulse circle
@@ -352,15 +374,15 @@ export default function NavigationPage() {
         // Set rain with official Mapbox API
         if (typeof mapAny.setRain === 'function') {
           mapAny.setRain({
-            density: 0.8,
-            intensity: 1.0,
+            density: 0.6,
+            intensity: 0.8,
             color: '#a8adbc',
-            opacity: 0.7,
-            vignette: 1.0,
+            opacity: 0.3,
+            vignette: 0.6,
             'vignette-color': '#464646',
             direction: [0, 80],
             'droplet-size': [2.6, 18.2],
-            'distortion-strength': 0.7,
+            'distortion-strength': 0.5,
             'center-thinning': 0
           })
           console.log('✅ Rain enabled')
@@ -409,7 +431,19 @@ export default function NavigationPage() {
   const speedAngle = -135 + (Math.min(speed, 200) / 200) * 270
 
   return (
-    <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, position: 'relative', overflow: 'hidden' }}>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: '100vw',
+      height: '100vh',
+      margin: 0,
+      padding: 0,
+      overflow: 'hidden',
+      zIndex: 50
+    }}>
       {/* Map Container */}
       <div
         ref={mapContainer}
