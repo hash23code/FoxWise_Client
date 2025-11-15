@@ -26,6 +26,10 @@ export default function NavigationPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [newJobNotification, setNewJobNotification] = useState<Job | null>(null)
   const previousJobCount = useRef<number>(0)
+  const [activeRoute, setActiveRoute] = useState<any>(null)
+  const [navigationMode, setNavigationMode] = useState(false)
+  const [routeInstructions, setRouteInstructions] = useState<any[]>([])
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
 
   // Fetch jobs and detect new ones
   useEffect(() => {
@@ -324,6 +328,67 @@ export default function NavigationPage() {
           'circle-blur': 0.8
         }
       })
+
+      // Add navigation route source
+      map.current.addSource('navigation-route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      })
+
+      // Add navigation route layer (below trail)
+      map.current.addLayer({
+        id: 'navigation-route-casing',
+        type: 'line',
+        source: 'navigation-route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#1e293b',
+          'line-width': 12,
+          'line-opacity': 0.8
+        }
+      })
+
+      map.current.addLayer({
+        id: 'navigation-route-line',
+        type: 'line',
+        source: 'navigation-route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#3b82f6',
+          'line-width': 8,
+          'line-opacity': 0.9
+        }
+      })
+
+      // Add dashed overlay for route direction indication
+      map.current.addLayer({
+        id: 'navigation-route-dashes',
+        type: 'line',
+        source: 'navigation-route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#60a5fa',
+          'line-width': 4,
+          'line-opacity': 0.8,
+          'line-dasharray': [2, 2]
+        }
+      })
     })
 
     // Detect manual map movement (stop GPS follow when user pans)
@@ -588,6 +653,77 @@ export default function NavigationPage() {
     }
   }, [weather])
 
+  // Function to calculate route to job using Mapbox Directions API
+  const calculateRoute = async (destinationLng: number, destinationLat: number) => {
+    if (!currentPosition) {
+      console.error('❌ No current position available')
+      return null
+    }
+
+    const { longitude: startLng, latitude: startLat } = currentPosition
+    const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY
+
+    try {
+      // Use Mapbox Directions API with driving profile
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${destinationLng},${destinationLat}?geometries=geojson&steps=true&banner_instructions=true&voice_instructions=true&access_token=${apiKey}`
+
+      const response = await fetch(url)
+      const data = await response.json()
+
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0]
+        console.log('✅ Route calculated:', route.distance, 'meters,', route.duration, 'seconds')
+
+        // Update map with route
+        if (map.current?.getSource('navigation-route')) {
+          (map.current.getSource('navigation-route') as mapboxgl.GeoJSONSource).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: route.geometry
+          })
+        }
+
+        // Extract turn-by-turn instructions
+        const instructions = route.legs[0].steps.map((step: any) => ({
+          instruction: step.maneuver.instruction,
+          distance: step.distance,
+          duration: step.duration
+        }))
+
+        setActiveRoute(route)
+        setRouteInstructions(instructions)
+        setCurrentStepIndex(0)
+        setNavigationMode(true)
+
+        return route
+      } else {
+        console.error('❌ No route found')
+        return null
+      }
+    } catch (error) {
+      console.error('❌ Error calculating route:', error)
+      return null
+    }
+  }
+
+  // Clear navigation route
+  const clearRoute = () => {
+    if (map.current?.getSource('navigation-route')) {
+      (map.current.getSource('navigation-route') as mapboxgl.GeoJSONSource).setData({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: []
+        }
+      })
+    }
+    setActiveRoute(null)
+    setNavigationMode(false)
+    setRouteInstructions([])
+    setCurrentStepIndex(0)
+  }
+
   // Calculate session time
   const sessionTime = Math.floor((Date.now() - sessionStart) / 1000)
   const minutes = Math.floor(sessionTime / 60)
@@ -803,6 +939,64 @@ export default function NavigationPage() {
         </div>
       </div>
 
+      {/* Navigation Instructions Panel - Below Session Stats */}
+      {navigationMode && routeInstructions.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 180,
+          left: 20,
+          background: 'rgba(0, 0, 0, 0.9)',
+          backdropFilter: 'blur(30px)',
+          padding: '20px',
+          borderRadius: '20px',
+          border: '2px solid rgba(59, 130, 246, 0.5)',
+          boxShadow: '0 0 40px rgba(59, 130, 246, 0.3)',
+          zIndex: 1000,
+          minWidth: '300px',
+          maxWidth: '400px',
+          animation: 'slideInLeft 0.3s ease'
+        }}>
+          <div style={{ color: '#3b82f6', fontSize: '12px', fontWeight: 'bold', marginBottom: '15px', textTransform: 'uppercase' }}>
+            🧭 Navigation Active
+          </div>
+
+          {/* Current instruction */}
+          {currentStepIndex < routeInstructions.length && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(102, 126, 234, 0.2))',
+              padding: '15px',
+              borderRadius: '12px',
+              marginBottom: '15px'
+            }}>
+              <div style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', marginBottom: '8px', lineHeight: 1.4 }}>
+                {routeInstructions[currentStepIndex].instruction}
+              </div>
+              <div style={{ color: '#9ca3af', fontSize: '13px' }}>
+                Dans {(routeInstructions[currentStepIndex].distance).toFixed(0)}m
+              </div>
+            </div>
+          )}
+
+          {/* Route summary */}
+          {activeRoute && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', marginTop: '10px' }}>
+              <div>
+                <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>Distance totale</div>
+                <div style={{ color: 'white', fontSize: '14px', fontWeight: 'bold' }}>
+                  {(activeRoute.distance / 1000).toFixed(1)} km
+                </div>
+              </div>
+              <div>
+                <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>Temps estimé</div>
+                <div style={{ color: 'white', fontSize: '14px', fontWeight: 'bold' }}>
+                  {Math.ceil(activeRoute.duration / 60)} min
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Weather Toggle - Top Center */}
       <div style={{
         position: 'absolute',
@@ -936,12 +1130,15 @@ export default function NavigationPage() {
         bottom: 30,
         left: '50%',
         transform: 'translateX(-50%)',
-        background: followGPS ? 'rgba(16, 185, 129, 0.9)' : 'rgba(234, 179, 8, 0.9)',
+        background: navigationMode ? 'rgba(59, 130, 246, 0.9)' :
+                    followGPS ? 'rgba(16, 185, 129, 0.9)' : 'rgba(234, 179, 8, 0.9)',
         backdropFilter: 'blur(30px)',
         padding: '12px 25px',
         borderRadius: '20px',
-        border: followGPS ? '2px solid rgba(16, 185, 129, 0.5)' : '2px solid rgba(234, 179, 8, 0.5)',
-        boxShadow: followGPS ? '0 0 30px rgba(16, 185, 129, 0.3)' : '0 0 30px rgba(234, 179, 8, 0.3)',
+        border: navigationMode ? '2px solid rgba(59, 130, 246, 0.5)' :
+                followGPS ? '2px solid rgba(16, 185, 129, 0.5)' : '2px solid rgba(234, 179, 8, 0.5)',
+        boxShadow: navigationMode ? '0 0 30px rgba(59, 130, 246, 0.3)' :
+                   followGPS ? '0 0 30px rgba(16, 185, 129, 0.3)' : '0 0 30px rgba(234, 179, 8, 0.3)',
         zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
@@ -951,14 +1148,17 @@ export default function NavigationPage() {
           width: '12px',
           height: '12px',
           borderRadius: '50%',
-          background: followGPS ? '#10b981' : '#eab308',
+          background: navigationMode ? '#3b82f6' : followGPS ? '#10b981' : '#eab308',
           animation: 'pulse 2s infinite',
-          boxShadow: followGPS ? '0 0 15px #10b981' : '0 0 15px #eab308'
+          boxShadow: navigationMode ? '0 0 15px #3b82f6' :
+                     followGPS ? '0 0 15px #10b981' : '0 0 15px #eab308'
         }} />
         <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-          {followGPS
-            ? (viewMode === 'immersive' ? '🏎️ GPS IMMERSIF' : '🗺️ GPS CARTE')
-            : '🖐️ FREE ROAM'}
+          {navigationMode
+            ? '🧭 NAVIGATION ACTIVE'
+            : followGPS
+              ? (viewMode === 'immersive' ? '🏎️ GPS IMMERSIF' : '🗺️ GPS CARTE')
+              : '🖐️ FREE ROAM'}
         </div>
       </div>
 
@@ -1151,44 +1351,67 @@ export default function NavigationPage() {
               </div>
             </div>
 
-            {/* Action Button */}
+            {/* Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              <button
-                onClick={() => {
-                  if (selectedJob.latitude && selectedJob.longitude && map.current) {
-                    map.current.flyTo({
-                      center: [selectedJob.longitude, selectedJob.latitude],
-                      zoom: 18,
-                      pitch: 70,
-                      duration: 2000
-                    })
-                    setFollowGPS(true)
-                    console.log('🚀 Navigating to job location')
-                  }
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #667eea, #3b82f6)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '14px 20px',
-                  color: 'white',
-                  fontSize: '15px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)'
-                }}
-              >
-                🧭 Naviguer vers ce job
-              </button>
+              {!navigationMode ? (
+                <button
+                  onClick={async () => {
+                    if (selectedJob.latitude && selectedJob.longitude) {
+                      await calculateRoute(selectedJob.longitude, selectedJob.latitude)
+                      setFollowGPS(true)
+                      console.log('🚀 Navigation started to job')
+                    }
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea, #3b82f6)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '14px 20px',
+                    color: 'white',
+                    fontSize: '15px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)'
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)'
+                  }}
+                >
+                  🧭 Démarrer la navigation
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    clearRoute()
+                    console.log('🛑 Navigation stopped')
+                  }}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    border: '1px solid #ef4444',
+                    borderRadius: '12px',
+                    padding: '14px 20px',
+                    color: '#ef4444',
+                    fontSize: '15px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'
+                  }}
+                >
+                  🛑 Arrêter la navigation
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1280,14 +1503,9 @@ export default function NavigationPage() {
             {/* Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <button
-                onClick={() => {
-                  if (newJobNotification.latitude && newJobNotification.longitude && map.current) {
-                    map.current.flyTo({
-                      center: [newJobNotification.longitude, newJobNotification.latitude],
-                      zoom: 18,
-                      pitch: 70,
-                      duration: 2000
-                    })
+                onClick={async () => {
+                  if (newJobNotification.latitude && newJobNotification.longitude) {
+                    await calculateRoute(newJobNotification.longitude, newJobNotification.latitude)
                     setFollowGPS(true)
                     setSelectedJob(newJobNotification)
                     setNewJobNotification(null)
@@ -1418,6 +1636,17 @@ export default function NavigationPage() {
         @keyframes slideInRight {
           0% {
             transform: translateX(100%);
+            opacity: 0;
+          }
+          100% {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes slideInLeft {
+          0% {
+            transform: translateX(-100%);
             opacity: 0;
           }
           100% {
