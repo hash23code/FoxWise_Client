@@ -14,8 +14,7 @@ export async function GET() {
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
-        job_type:fc_job_types(*),
-        activity:fc_activities(*)
+        job_type:fc_job_types(*)
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -46,8 +45,7 @@ export async function POST(request: Request) {
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
-        job_type:fc_job_types(*),
-        activity:fc_activities(*)
+        job_type:fc_job_types(*)
       `)
       .single()
 
@@ -98,8 +96,7 @@ export async function PUT(request: Request) {
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
-        job_type:fc_job_types(*),
-        activity:fc_activities(*)
+        job_type:fc_job_types(*)
       `)
       .single()
 
