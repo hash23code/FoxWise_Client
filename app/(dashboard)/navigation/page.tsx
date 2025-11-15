@@ -30,6 +30,7 @@ export default function NavigationPage() {
   const [navigationMode, setNavigationMode] = useState(false)
   const [routeInstructions, setRouteInstructions] = useState<any[]>([])
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [showNavWidgets, setShowNavWidgets] = useState(true)
 
   // Fetch jobs and detect new ones
   useEffect(() => {
@@ -190,6 +191,27 @@ export default function NavigationPage() {
 
     updateJobStatuses()
   }, [currentPosition, jobs])
+
+  // Animate navigation route dashes
+  useEffect(() => {
+    if (!map.current || !navigationMode) return
+
+    let dashOffset = 0
+    const animateRoute = () => {
+      dashOffset = (dashOffset + 0.5) % 7 // Cycle through dash pattern
+
+      if (map.current?.getLayer('navigation-route-dashes')) {
+        map.current.setPaintProperty(
+          'navigation-route-dashes',
+          'line-dasharray',
+          [0, 4 - dashOffset, 3 + dashOffset]
+        )
+      }
+    }
+
+    const interval = setInterval(animateRoute, 50) // Animate every 50ms
+    return () => clearInterval(interval)
+  }, [navigationMode])
 
   // Initialize map ONCE
   useEffect(() => {
@@ -354,7 +376,7 @@ export default function NavigationPage() {
         paint: {
           'line-color': '#1e293b',
           'line-width': 12,
-          'line-opacity': 0.8
+          'line-opacity': 0.6
         }
       })
 
@@ -367,13 +389,13 @@ export default function NavigationPage() {
           'line-cap': 'round'
         },
         paint: {
-          'line-color': '#3b82f6',
+          'line-color': '#93c5fd', // Bleu pâle
           'line-width': 8,
-          'line-opacity': 0.9
+          'line-opacity': 0.8
         }
       })
 
-      // Add dashed overlay for route direction indication
+      // Add animated dashed overlay for route direction indication
       map.current.addLayer({
         id: 'navigation-route-dashes',
         type: 'line',
@@ -383,10 +405,10 @@ export default function NavigationPage() {
           'line-cap': 'round'
         },
         paint: {
-          'line-color': '#60a5fa',
+          'line-color': '#dbeafe', // Bleu très pâle pour les tirets
           'line-width': 4,
-          'line-opacity': 0.8,
-          'line-dasharray': [2, 2]
+          'line-opacity': 0.9,
+          'line-dasharray': [0, 4, 3] // Pattern for animation
         }
       })
     })
@@ -968,11 +990,11 @@ export default function NavigationPage() {
           top: 0,
           left: 0,
           right: 0,
-          background: 'rgba(0, 0, 0, 0.95)',
-          backdropFilter: 'blur(20px)',
+          background: 'rgba(0, 0, 0, 0.7)', // Semi-transparent
+          backdropFilter: 'blur(15px)',
           padding: '15px 20px',
-          borderBottom: '2px solid rgba(59, 130, 246, 0.5)',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+          borderBottom: '2px solid rgba(147, 197, 253, 0.3)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
           zIndex: 1500,
           display: 'flex',
           alignItems: 'center',
@@ -1005,6 +1027,107 @@ export default function NavigationPage() {
               </div>
             )}
           </div>
+
+          {/* Navigation Widgets - Compact Speed & Compass */}
+          {showNavWidgets && (
+            <div style={{
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'center'
+            }}>
+              {/* Mini Speedometer */}
+              <div style={{
+                width: '60px',
+                height: '60px',
+                background: 'rgba(102, 126, 234, 0.2)',
+                borderRadius: '50%',
+                border: '2px solid rgba(102, 126, 234, 0.4)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative'
+              }}>
+                <div style={{ color: 'white', fontSize: '16px', fontWeight: 'bold', lineHeight: 1 }}>
+                  {speed.toFixed(0)}
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: '9px', marginTop: '2px' }}>
+                  km/h
+                </div>
+              </div>
+
+              {/* Mini Compass */}
+              <div style={{
+                width: '60px',
+                height: '60px',
+                background: 'rgba(59, 130, 246, 0.2)',
+                borderRadius: '50%',
+                border: '2px solid rgba(59, 130, 246, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  transform: `rotate(${-heading}deg)`,
+                  transition: 'transform 0.5s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    color: '#ef4444',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>N</div>
+                </div>
+                <div style={{
+                  width: '2px',
+                  height: '20px',
+                  background: 'linear-gradient(to bottom, #ef4444, #3b82f6)',
+                  position: 'absolute'
+                }} />
+                <div style={{
+                  color: 'white',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  position: 'absolute',
+                  bottom: '8px'
+                }}>
+                  {heading.toFixed(0)}°
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Toggle widgets button */}
+          <button
+            onClick={() => setShowNavWidgets(!showNavWidgets)}
+            style={{
+              background: 'rgba(147, 197, 253, 0.2)',
+              border: '1px solid rgba(147, 197, 253, 0.3)',
+              borderRadius: '8px',
+              width: '36px',
+              height: '36px',
+              color: '#93c5fd',
+              cursor: 'pointer',
+              fontSize: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(147, 197, 253, 0.3)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(147, 197, 253, 0.2)'}
+          >
+            {showNavWidgets ? '👁️' : '👁️‍🗨️'}
+          </button>
 
           {/* Close button */}
           <button
