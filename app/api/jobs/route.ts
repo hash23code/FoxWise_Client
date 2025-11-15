@@ -13,8 +13,9 @@ export async function GET() {
       .from('fc_jobs')
       .select(`
         *,
-        client:fc_clients(*),
-        job_type:fc_job_types(*)
+        client:fc_clients(*, sector:fc_sectors(*)),
+        job_type:fc_job_types(*),
+        activity:fc_activities(*)
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -42,7 +43,12 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('fc_jobs')
       .insert([{ ...body, user_id: userId }])
-      .select()
+      .select(`
+        *,
+        client:fc_clients(*, sector:fc_sectors(*)),
+        job_type:fc_job_types(*),
+        activity:fc_activities(*)
+      `)
       .single()
 
     if (error) {
@@ -89,7 +95,12 @@ export async function PUT(request: Request) {
       .update(body)
       .eq('id', id)
       .eq('user_id', userId)
-      .select()
+      .select(`
+        *,
+        client:fc_clients(*, sector:fc_sectors(*)),
+        job_type:fc_job_types(*),
+        activity:fc_activities(*)
+      `)
       .single()
 
     if (error) throw error
