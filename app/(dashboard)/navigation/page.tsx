@@ -24,14 +24,29 @@ export default function NavigationPage() {
   const [weather, setWeather] = useState<'clear' | 'rain' | 'snow'>('clear')
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const [newJobNotification, setNewJobNotification] = useState<Job | null>(null)
+  const previousJobCount = useRef<number>(0)
 
-  // Fetch jobs
+  // Fetch jobs and detect new ones
   useEffect(() => {
     const fetchJobs = async () => {
       try {
         const res = await fetch('/api/jobs')
         if (res.ok) {
           const data = await res.json()
+
+          // Detect new job assignments
+          if (previousJobCount.current > 0 && data.length > previousJobCount.current) {
+            const newJobs = data.filter((job: Job) =>
+              !jobs.find(existingJob => existingJob.id === job.id)
+            )
+            if (newJobs.length > 0) {
+              setNewJobNotification(newJobs[0]) // Show notification for first new job
+              console.log('🔔 New job assigned:', newJobs[0].title)
+            }
+          }
+
+          previousJobCount.current = data.length
           setJobs(data)
           console.log('✅ Jobs fetched:', data.length)
         }
@@ -39,8 +54,12 @@ export default function NavigationPage() {
         console.error('❌ Error fetching jobs:', error)
       }
     }
+
     fetchJobs()
-  }, [])
+    // Poll for new jobs every 30 seconds
+    const interval = setInterval(fetchJobs, 30000)
+    return () => clearInterval(interval)
+  }, [jobs])
 
   // Display jobs on map
   useEffect(() => {
@@ -54,15 +73,12 @@ export default function NavigationPage() {
     jobs.forEach(job => {
       if (!job.latitude || !job.longitude) return
 
-      // Color based on priority
+      // Color based on status and urgency
       const getColor = () => {
-        switch (job.priority) {
-          case 'urgent': return '#ef4444' // red
-          case 'high': return '#f59e0b' // orange
-          case 'medium': return '#3b82f6' // blue
-          case 'low': return '#10b981' // green
-          default: return '#6b7280' // gray
-        }
+        if (job.status === 'completed') return '#10b981' // green - completed
+        if (job.status === 'in_progress') return '#a855f7' // purple - in progress
+        if (job.priority === 'urgent') return '#ef4444' // red - urgent
+        return '#eab308' // yellow - pending (default)
       }
 
       const color = getColor()
@@ -100,6 +116,76 @@ export default function NavigationPage() {
 
     console.log(`✅ ${jobMarkers.current.length} job markers added to map`)
   }, [jobs, map.current])
+
+  // Auto-update job status based on GPS proximity
+  useEffect(() => {
+    if (!currentPosition || jobs.length === 0) return
+
+    const updateJobStatuses = async () => {
+      const { latitude: userLat, longitude: userLng } = currentPosition
+
+      for (const job of jobs) {
+        if (!job.latitude || !job.longitude) continue
+
+        // Calculate distance in meters using Haversine formula
+        const R = 6371000 // Earth radius in meters
+        const dLat = (job.latitude - userLat) * Math.PI / 180
+        const dLon = (job.longitude - userLng) * Math.PI / 180
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(userLat * Math.PI / 180) * Math.cos(job.latitude * Math.PI / 180) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        const distance = R * c // Distance in meters
+
+        // Auto-update status based on distance
+        if (distance < 50 && job.status === 'pending') {
+          // Within 50m - start job automatically
+          try {
+            const res = await fetch(`/api/jobs/${job.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                status: 'in_progress',
+                location_status: 'arrived',
+                arrived_at: new Date().toISOString()
+              })
+            })
+            if (res.ok) {
+              const updatedJob = await res.json()
+              setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
+              console.log(`🟣 Job auto-started (< 50m): ${job.title}`)
+            }
+          } catch (error) {
+            console.error('Error auto-starting job:', error)
+          }
+        } else if (distance > 50 && job.status === 'in_progress') {
+          // Left 50m radius - complete job automatically
+          try {
+            const res = await fetch(`/api/jobs/${job.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                status: 'completed',
+                location_status: 'completed',
+                completed_at: new Date().toISOString(),
+                completed_date: new Date().toISOString()
+              })
+            })
+            if (res.ok) {
+              const updatedJob = await res.json()
+              setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
+              console.log(`🟢 Job auto-completed (> 50m): ${job.title}`)
+            }
+          } catch (error) {
+            console.error('Error auto-completing job:', error)
+          }
+        }
+      }
+    }
+
+    updateJobStatuses()
+  }, [currentPosition, jobs])
 
   // Initialize map ONCE
   useEffect(() => {
@@ -967,15 +1053,15 @@ export default function NavigationPage() {
                 </div>
                 <div style={{
                   background: selectedJob.status === 'completed' ? 'rgba(16, 185, 129, 0.2)' :
-                              selectedJob.status === 'in_progress' ? 'rgba(59, 130, 246, 0.2)' :
+                              selectedJob.status === 'in_progress' ? 'rgba(168, 85, 247, 0.2)' :
                               selectedJob.status === 'cancelled' ? 'rgba(239, 68, 68, 0.2)' :
                               'rgba(234, 179, 8, 0.2)',
                   border: selectedJob.status === 'completed' ? '1px solid #10b981' :
-                          selectedJob.status === 'in_progress' ? '1px solid #3b82f6' :
+                          selectedJob.status === 'in_progress' ? '1px solid #a855f7' :
                           selectedJob.status === 'cancelled' ? '1px solid #ef4444' :
                           '1px solid #eab308',
                   color: selectedJob.status === 'completed' ? '#10b981' :
-                         selectedJob.status === 'in_progress' ? '#3b82f6' :
+                         selectedJob.status === 'in_progress' ? '#a855f7' :
                          selectedJob.status === 'cancelled' ? '#ef4444' :
                          '#eab308',
                   padding: '8px 12px',
@@ -985,10 +1071,10 @@ export default function NavigationPage() {
                   textAlign: 'center',
                   textTransform: 'capitalize'
                 }}>
-                  {selectedJob.status === 'in_progress' ? 'En cours' :
-                   selectedJob.status === 'completed' ? 'Terminé' :
+                  {selectedJob.status === 'in_progress' ? '🟣 En cours' :
+                   selectedJob.status === 'completed' ? '🟢 Terminé' :
                    selectedJob.status === 'cancelled' ? 'Annulé' :
-                   'En attente'}
+                   '🟡 En attente'}
                 </div>
               </div>
               <div style={{ flex: 1 }}>
@@ -1047,7 +1133,25 @@ export default function NavigationPage() {
               </div>
             )}
 
-            {/* Action Buttons */}
+            {/* Navigation Info */}
+            <div style={{
+              background: 'rgba(102, 126, 234, 0.1)',
+              border: '1px solid rgba(102, 126, 234, 0.3)',
+              borderRadius: '12px',
+              padding: '12px',
+              marginTop: '10px'
+            }}>
+              <div style={{ color: '#667eea', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>
+                ℹ️ STATUT AUTOMATIQUE
+              </div>
+              <div style={{ color: '#9ca3af', fontSize: '12px', lineHeight: 1.5 }}>
+                Le statut change automatiquement selon votre position:
+                <br/>• &lt; 50m → 🟣 En cours
+                <br/>• &gt; 50m → 🟢 Terminé
+              </div>
+            </div>
+
+            {/* Action Button */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
               <button
                 onClick={() => {
@@ -1058,6 +1162,7 @@ export default function NavigationPage() {
                       pitch: 70,
                       duration: 2000
                     })
+                    setFollowGPS(true)
                     console.log('🚀 Navigating to job location')
                   }
                 }}
@@ -1084,139 +1189,164 @@ export default function NavigationPage() {
               >
                 🧭 Naviguer vers ce job
               </button>
-
-              {selectedJob.status === 'pending' && (
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await fetch(`/api/jobs/${selectedJob.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'in_progress', location_status: 'en_route' })
-                      })
-                      if (res.ok) {
-                        const updatedJob = await res.json()
-                        setSelectedJob(updatedJob)
-                        setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
-                        console.log('✅ Job status updated to in_progress')
-                      }
-                    } catch (error) {
-                      console.error('❌ Error updating job:', error)
-                    }
-                  }}
-                  style={{
-                    background: 'rgba(59, 130, 246, 0.2)',
-                    border: '1px solid #3b82f6',
-                    borderRadius: '12px',
-                    padding: '12px 20px',
-                    color: '#3b82f6',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'
-                  }}
-                >
-                  🚀 Démarrer le job
-                </button>
-              )}
-
-              {selectedJob.status === 'in_progress' && (
-                <>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/jobs/${selectedJob.id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            location_status: 'arrived',
-                            arrived_at: new Date().toISOString()
-                          })
-                        })
-                        if (res.ok) {
-                          const updatedJob = await res.json()
-                          setSelectedJob(updatedJob)
-                          setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
-                          console.log('✅ Marked as arrived')
-                        }
-                      } catch (error) {
-                        console.error('❌ Error updating job:', error)
-                      }
-                    }}
-                    style={{
-                      background: 'rgba(245, 158, 11, 0.2)',
-                      border: '1px solid #f59e0b',
-                      borderRadius: '12px',
-                      padding: '12px 20px',
-                      color: '#f59e0b',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(245, 158, 11, 0.3)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(245, 158, 11, 0.2)'
-                    }}
-                  >
-                    📍 Marqué comme arrivé
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/jobs/${selectedJob.id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            status: 'completed',
-                            location_status: 'completed',
-                            completed_at: new Date().toISOString(),
-                            completed_date: new Date().toISOString()
-                          })
-                        })
-                        if (res.ok) {
-                          const updatedJob = await res.json()
-                          setSelectedJob(updatedJob)
-                          setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
-                          console.log('✅ Job completed')
-                        }
-                      } catch (error) {
-                        console.error('❌ Error updating job:', error)
-                      }
-                    }}
-                    style={{
-                      background: 'rgba(16, 185, 129, 0.2)',
-                      border: '1px solid #10b981',
-                      borderRadius: '12px',
-                      padding: '12px 20px',
-                      color: '#10b981',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(16, 185, 129, 0.3)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)'
-                    }}
-                  >
-                    ✅ Terminer le job
-                  </button>
-                </>
-              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* New Job Notification Modal */}
+      {newJobNotification && (
+        <>
+          {/* Backdrop */}
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 1999,
+            animation: 'fadeIn 0.3s ease'
+          }} />
+
+          {/* Modal */}
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '400px',
+            background: 'rgba(0, 0, 0, 0.95)',
+            backdropFilter: 'blur(40px)',
+            borderRadius: '24px',
+            border: '2px solid rgba(234, 179, 8, 0.5)',
+            boxShadow: '0 0 60px rgba(234, 179, 8, 0.4), 0 20px 40px rgba(0,0,0,0.5)',
+            zIndex: 2000,
+            overflow: 'hidden',
+            animation: 'slideInScale 0.4s ease'
+          }}>
+          {/* Header */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(245, 158, 11, 0.3))',
+            padding: '24px',
+            textAlign: 'center',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📋</div>
+            <div style={{ color: '#eab308', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase' }}>
+              Nouveau Job Assigné!
+            </div>
+            <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold', lineHeight: 1.3 }}>
+              {newJobNotification.title}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ padding: '24px' }}>
+            {/* Client Info */}
+            {newJobNotification.client && (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '12px',
+                padding: '12px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>Client</div>
+                <div style={{ color: 'white', fontSize: '15px', fontWeight: 'bold' }}>
+                  {newJobNotification.client.name}
+                </div>
+                {newJobNotification.client.formatted_address && (
+                  <div style={{ color: '#6b7280', fontSize: '12px', marginTop: '4px' }}>
+                    📍 {newJobNotification.client.formatted_address}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Priority Badge */}
+            {newJobNotification.priority === 'urgent' && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: '1px solid #ef4444',
+                borderRadius: '12px',
+                padding: '12px',
+                marginBottom: '20px',
+                textAlign: 'center'
+              }}>
+                <div style={{ color: '#ef4444', fontSize: '15px', fontWeight: 'bold' }}>
+                  🔴 URGENT
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button
+                onClick={() => {
+                  if (newJobNotification.latitude && newJobNotification.longitude && map.current) {
+                    map.current.flyTo({
+                      center: [newJobNotification.longitude, newJobNotification.latitude],
+                      zoom: 18,
+                      pitch: 70,
+                      duration: 2000
+                    })
+                    setFollowGPS(true)
+                    setSelectedJob(newJobNotification)
+                    setNewJobNotification(null)
+                    console.log('🚀 Navigation started to new job')
+                  }
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #eab308, #f59e0b)',
+                  border: 'none',
+                  borderRadius: '14px',
+                  padding: '16px 24px',
+                  color: 'white',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 20px rgba(234, 179, 8, 0.4)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 25px rgba(234, 179, 8, 0.5)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(234, 179, 8, 0.4)'
+                }}
+              >
+                🚀 Y aller maintenant
+              </button>
+
+              <button
+                onClick={() => {
+                  setNewJobNotification(null)
+                  console.log('📅 Job added to planning')
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '14px',
+                  padding: '16px 24px',
+                  color: 'white',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+                }}
+              >
+                📅 Ajouter au planning
+              </button>
+            </div>
+          </div>
+          </div>
+        </>
       )}
 
       {/* Gradient Overlays for depth */}
@@ -1292,6 +1422,26 @@ export default function NavigationPage() {
           }
           100% {
             transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes slideInScale {
+          0% {
+            transform: translate(-50%, -50%) scale(0.8);
+            opacity: 0;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+          }
+        }
+
+        @keyframes fadeIn {
+          0% {
+            opacity: 0;
+          }
+          100% {
             opacity: 1;
           }
         }
