@@ -628,7 +628,7 @@ export default function JobsPage() {
                     placeholder="Adresse complète"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Auto-rempli lors de la sélection d'un client</p>
+                <p className="text-xs text-gray-500 mt-1">Auto-rempli lors de la sélection d&apos;un client</p>
               </div>
 
               {/* Status & Priority */}
