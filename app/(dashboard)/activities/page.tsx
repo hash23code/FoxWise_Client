@@ -131,21 +131,19 @@ export default function ActivitiesPage() {
                   style={{ backgroundColor: activity.color }}
                 />
               </div>
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex gap-2">
                 <button
                   onClick={() => handleEdit(activity)}
                   className="p-2 text-gray-400 hover:text-cyan-400 transition-colors"
                 >
                   <Edit className="w-4 h-4" />
                 </button>
-                {activity.user_id !== 'system' && (
-                  <button
-                    onClick={() => handleDelete(activity.id)}
-                    className="p-2 text-gray-400 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => handleDelete(activity.id)}
+                  className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
 

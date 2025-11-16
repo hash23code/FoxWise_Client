@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -17,13 +17,23 @@ import {
   Building2,
   DollarSign,
   Smartphone,
+  MapPin,
+  Navigation,
+  Clock,
+  UserPlus,
+  Zap,
+  TrendingUp,
+  Check,
+  Globe,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 export default function LandingPage() {
   const router = useRouter();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
+  const { scrollYProgress } = useScroll();
+  const heroRef = useRef(null);
 
   useEffect(() => {
     setMounted(true);
@@ -37,47 +47,100 @@ export default function LandingPage() {
   const features = [
     {
       icon: Users,
-      title: "Gestion Clients Complète",
-      description: "Centralisez toutes les informations de vos clients: coordonnées, secteurs, notes et historique.",
+      title: "Gestion Multi-Tenant",
+      description: "Architecture entreprise avec isolation complète des données par compagnie. Chaque entreprise a son propre espace sécurisé.",
       gradient: "from-blue-600 to-cyan-600",
     },
     {
-      icon: Briefcase,
-      title: "Suivi des Jobs",
-      description: "Suivez tous vos projets et tâches avec statuts, priorités, coûts et assignations.",
+      icon: UserPlus,
+      title: "Gestion d'Employés",
+      description: "Invitez et gérez vos employés avec un système d'invitation par email. Assignez des rôles et contrôlez les permissions.",
       gradient: "from-purple-600 to-pink-600",
     },
     {
-      icon: Calendar,
-      title: "Calendrier Intégré",
-      description: "Planifiez vos rendez-vous et synchronisez-les avec vos clients et jobs.",
+      icon: Navigation,
+      title: "GPS 3D Navigation",
+      description: "Navigation GPS en temps réel avec mode 3D immersif. Guidez vos employés directement vers leurs jobs avec précision.",
       gradient: "from-green-600 to-emerald-600",
+    },
+    {
+      icon: MapPin,
+      title: "Cartes Interactives",
+      description: "Visualisez tous vos jobs et clients sur une carte interactive. Planifiez les itinéraires et optimisez les déplacements.",
+      gradient: "from-orange-600 to-red-600",
+    },
+    {
+      icon: Clock,
+      title: "Suivi du Temps Automatique",
+      description: "Le temps de travail est calculé automatiquement à partir du GPS de navigation des employés. Rapports précis et fiables.",
+      gradient: "from-indigo-600 to-purple-600",
+    },
+    {
+      icon: BarChart3,
+      title: "Rapports Complets",
+      description: "Tableaux de bord avancés pour les gestionnaires. Analysez la performance, les temps de travail et la productivité.",
+      gradient: "from-yellow-600 to-orange-600",
+    },
+    {
+      icon: Briefcase,
+      title: "Deux Applications",
+      description: "FoxWise Client pour les gestionnaires et FoxWise Worker pour les employés. Interfaces optimisées pour chaque rôle.",
+      gradient: "from-red-600 to-pink-600",
     },
     {
       icon: Building2,
       title: "Organisation par Secteurs",
-      description: "Classez vos clients par secteurs d&apos;activité pour une meilleure organisation.",
-      gradient: "from-orange-600 to-red-600",
-    },
-    {
-      icon: BarChart3,
-      title: "Rapports & Analytics",
-      description: "Visualisez vos performances avec des tableaux de bord et statistiques en temps réel.",
-      gradient: "from-indigo-600 to-purple-600",
+      description: "Classez vos clients par secteurs géographiques. Assignez des zones à vos employés pour une meilleure efficacité.",
+      gradient: "from-cyan-600 to-blue-600",
     },
     {
       icon: DollarSign,
-      title: "Suivi Paiements",
-      description: "Gérez les paiements, factures et suivez votre rentabilité par projet.",
-      gradient: "from-yellow-600 to-orange-600",
+      title: "Gestion Financière",
+      description: "Suivez les coûts, revenus et rentabilité par job. Facturez vos clients et gérez les paiements facilement.",
+      gradient: "from-green-600 to-teal-600",
     },
   ];
 
   const stats = [
-    { value: "100%", label: "Gratuit", icon: CheckCircle2 },
-    { value: "Cloud", label: "Sécurisé", icon: Shield },
-    { value: "∞", label: "Clients", icon: Users },
-    { value: "24/7", label: "Accessible", icon: Smartphone }
+    { value: "2", label: "Applications", icon: Smartphone },
+    { value: "GPS 3D", label: "Navigation", icon: Navigation },
+    { value: "Auto", label: "Temps Suivi", icon: Clock },
+    { value: "Cloud", label: "Sécurisé", icon: Shield }
+  ];
+
+  const pricingPlans = [
+    {
+      name: "Mensuel",
+      price: "$39.99",
+      period: "/mois",
+      features: [
+        "Employés illimités",
+        "GPS 3D Navigation",
+        "Rapports complets",
+        "Support prioritaire",
+        "Multi-tenant",
+        "Mises à jour incluses"
+      ],
+      gradient: "from-orange-500 to-red-500",
+      popular: false
+    },
+    {
+      name: "Annuel",
+      price: "$29.99",
+      period: "/mois",
+      originalPrice: "$39.99",
+      savings: "Économisez 25%",
+      features: [
+        "Tout du plan mensuel",
+        "2 mois gratuits",
+        "Accès anticipé aux nouvelles fonctionnalités",
+        "Facturation annuelle ($359.88/an)",
+        "Support VIP",
+        "Garantie satisfaction 30 jours"
+      ],
+      gradient: "from-cyan-500 to-blue-600",
+      popular: true
+    }
   ];
 
   return (
@@ -183,11 +246,11 @@ export default function LandingPage() {
             className="text-6xl md:text-8xl font-bold mb-6 leading-tight"
           >
             <span className="bg-gradient-to-r from-white via-orange-200 to-red-200 bg-clip-text text-transparent">
-              Gérez Vos Clients
+              Gérez Votre Équipe
             </span>
             <br />
             <span className="bg-gradient-to-r from-orange-400 via-red-400 to-amber-400 bg-clip-text text-transparent">
-              Comme un Pro
+              En Temps Réel
             </span>
           </motion.h1>
 
@@ -197,8 +260,9 @@ export default function LandingPage() {
             transition={{ delay: 0.4 }}
             className="text-xl md:text-2xl text-gray-300 mb-8 max-w-5xl mx-auto leading-relaxed"
           >
-            La solution complète pour gérer vos clients, jobs, calendrier et paiements.
-            Tout en un seul endroit. Simple, puissant, et gratuit.
+            La plateforme complète pour gérer vos employés, jobs et clients avec GPS 3D,
+            suivi automatique du temps de travail et rapports avancés. Deux applications
+            dédiées: une pour les gestionnaires, une pour les employés.
           </motion.p>
 
           <motion.div
@@ -214,7 +278,7 @@ export default function LandingPage() {
               className="group px-10 py-5 rounded-xl bg-gradient-to-r from-orange-600 via-red-600 to-amber-600 text-white font-bold text-lg shadow-2xl shadow-orange-500/50 flex items-center gap-3"
             >
               <Users className="w-6 h-6" />
-              Commencer Gratuitement
+              Commencer Maintenant
               <motion.div
                 animate={{ x: [0, 5, 0] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
@@ -225,10 +289,9 @@ export default function LandingPage() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => router.push("/dashboard")}
               className="px-10 py-5 rounded-xl border-2 border-orange-500/50 text-orange-300 font-bold text-lg hover:bg-orange-500/10 transition-colors"
             >
-              Voir la Démo
+              <a href="#pricing">Voir les Prix</a>
             </motion.button>
           </motion.div>
 
@@ -375,6 +438,376 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Employee Management Showcase */}
+      <motion.section
+        initial={{ opacity: 0, x: -100 }}
+        whileInView={{ opacity: 1, x: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+        className="relative z-10 container mx-auto px-6 py-32"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/30 mb-6">
+              <UserPlus className="w-5 h-5 text-purple-400" />
+              <span className="text-purple-300 font-semibold">Gestion d&apos;Équipe</span>
+            </div>
+            <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-red-400 bg-clip-text text-transparent">
+              Invitez et Gérez Vos Employés
+            </h2>
+            <p className="text-xl text-gray-300 mb-8 leading-relaxed">
+              Envoyez des invitations par email à vos employés. Ils reçoivent un lien sécurisé
+              pour télécharger l&apos;application FoxWise Worker et rejoindre votre équipe.
+            </p>
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Invitations par email avec tokens sécurisés</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Gestion des rôles et permissions par employé</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Assignation automatique à votre compagnie</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Interface distincte pour gestionnaires et employés</span>
+              </li>
+            </ul>
+          </div>
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-purple-900/20 to-pink-900/20 border border-purple-500/30 p-8"
+          >
+            <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+                  <UserPlus className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="text-white font-semibold">Nouveau Employé</div>
+                  <div className="text-gray-400 text-sm">Invitation envoyée</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-300">Email</span>
+                  <span className="text-purple-400">employee@example.com</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-300">Rôle</span>
+                  <span className="text-pink-400">Employé</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-300">Statut</span>
+                  <span className="text-green-400 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    Actif
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.section>
+
+      {/* GPS Navigation Showcase */}
+      <motion.section
+        initial={{ opacity: 0, x: 100 }}
+        whileInView={{ opacity: 1, x: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+        className="relative z-10 container mx-auto px-6 py-32 bg-gradient-to-b from-transparent via-green-900/5 to-transparent"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="order-2 lg:order-1 relative rounded-3xl overflow-hidden bg-gradient-to-br from-green-900/20 to-emerald-900/20 border border-green-500/30 p-8"
+          >
+            <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
+                    <Navigation className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold">Navigation Active</div>
+                    <div className="text-gray-400 text-sm">Mode 3D</div>
+                  </div>
+                </div>
+                <div className="px-3 py-1 bg-green-500/20 border border-green-500/50 rounded-full text-green-400 text-sm font-semibold">
+                  En Route
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-300">Destination</span>
+                  <span className="text-green-400">123 Rue Client</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-300">Distance</span>
+                  <span className="text-emerald-400">2.4 km</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-300">Temps estimé</span>
+                  <span className="text-cyan-400">8 minutes</span>
+                </div>
+                <div className="mt-4 h-32 bg-gradient-to-br from-green-600/20 to-blue-600/20 rounded-lg flex items-center justify-center">
+                  <MapPin className="w-16 h-16 text-green-400 animate-pulse" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+          <div className="order-1 lg:order-2">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/30 mb-6">
+              <Navigation className="w-5 h-5 text-green-400" />
+              <span className="text-green-300 font-semibold">GPS 3D Navigation</span>
+            </div>
+            <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              Navigation Immersive en 3D
+            </h2>
+            <p className="text-xl text-gray-300 mb-8 leading-relaxed">
+              Vos employés bénéficient d&apos;une navigation GPS professionnelle avec vue 3D
+              pour se rendre à leurs jobs. Itinéraires optimisés et guidage vocal.
+            </p>
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Navigation 3D interactive avec Mapbox</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Cartes interactives pour visualiser tous les jobs</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Itinéraires optimisés en temps réel</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+                <span>Suivi de position en direct pour les gestionnaires</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* Time Tracking Showcase */}
+      <motion.section
+        initial={{ opacity: 0, x: -100 }}
+        whileInView={{ opacity: 1, x: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+        className="relative z-10 container mx-auto px-6 py-32"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/30 mb-6">
+              <Clock className="w-5 h-5 text-blue-400" />
+              <span className="text-blue-300 font-semibold">Suivi Automatique</span>
+            </div>
+            <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent">
+              Temps de Travail Automatique
+            </h2>
+            <p className="text-xl text-gray-300 mb-8 leading-relaxed">
+              Le temps de travail est calculé automatiquement à partir de la navigation GPS
+              des employés. Rapports précis et fiables sans intervention manuelle.
+            </p>
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-blue-400 flex-shrink-0" />
+                <span>Calcul automatique basé sur le GPS</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-blue-400 flex-shrink-0" />
+                <span>Rapports détaillés par employé et par job</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-blue-400 flex-shrink-0" />
+                <span>Tableaux de bord pour les gestionnaires</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-300">
+                <CheckCircle2 className="w-6 h-6 text-blue-400 flex-shrink-0" />
+                <span>Export des données pour la paie</span>
+              </li>
+            </ul>
+          </div>
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-blue-900/20 to-cyan-900/20 border border-blue-500/30 p-8"
+          >
+            <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="text-white font-semibold">Rapport Hebdomadaire</div>
+                  <div className="text-gray-400 text-sm">Semaine du 11-17 Nov</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="p-4 bg-gray-800/50 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">Jean Tremblay</span>
+                    <span className="text-blue-400 font-semibold">42.5h</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2 rounded-full" style={{ width: '85%' }} />
+                  </div>
+                </div>
+                <div className="p-4 bg-gray-800/50 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">Marie Dubois</span>
+                    <span className="text-cyan-400 font-semibold">38.0h</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div className="bg-gradient-to-r from-cyan-500 to-teal-500 h-2 rounded-full" style={{ width: '76%' }} />
+                  </div>
+                </div>
+                <div className="p-4 bg-gray-800/50 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">Pierre Gagnon</span>
+                    <span className="text-teal-400 font-semibold">40.0h</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div className="bg-gradient-to-r from-teal-500 to-green-500 h-2 rounded-full" style={{ width: '80%' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="relative z-10 container mx-auto px-6 py-32 bg-gradient-to-b from-transparent via-blue-900/5 to-transparent">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center mb-20"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/30 mb-6">
+            <DollarSign className="w-5 h-5 text-cyan-400" />
+            <span className="text-cyan-300 font-semibold">Tarification Simple</span>
+          </div>
+          <h2 className="text-6xl font-bold mb-6 bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Choisissez Votre Plan
+          </h2>
+          <p className="text-2xl text-gray-300 max-w-4xl mx-auto">
+            Pas de frais cachés. Pas de surprise. Juste des outils puissants pour votre équipe.
+          </p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          {pricingPlans.map((plan, index) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 }}
+              whileHover={{ y: -10, scale: 1.02 }}
+              className={`relative p-8 rounded-3xl bg-gradient-to-br from-gray-900 to-gray-800 border-2 ${
+                plan.popular ? 'border-cyan-500/50 shadow-2xl shadow-cyan-500/20' : 'border-gray-700'
+              } transition-all`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full text-white font-bold text-sm">
+                  ⭐ MEILLEURE VALEUR
+                </div>
+              )}
+              <div className="text-center mb-8">
+                <h3 className="text-3xl font-bold text-white mb-2">{plan.name}</h3>
+                {plan.savings && (
+                  <div className="text-green-400 font-semibold mb-4">{plan.savings}</div>
+                )}
+                <div className="flex items-baseline justify-center gap-2">
+                  {plan.originalPrice && (
+                    <span className="text-2xl text-gray-500 line-through">{plan.originalPrice}</span>
+                  )}
+                  <span className={`text-6xl font-bold bg-gradient-to-r ${plan.gradient} bg-clip-text text-transparent`}>
+                    {plan.price}
+                  </span>
+                  <span className="text-gray-400 text-xl">{plan.period}</span>
+                </div>
+              </div>
+              <ul className="space-y-4 mb-8">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-center gap-3 text-gray-300">
+                    <Check className="w-5 h-5 text-green-400 flex-shrink-0" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => router.push("/sign-up")}
+                className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${
+                  plan.popular
+                    ? `bg-gradient-to-r ${plan.gradient} text-white shadow-lg`
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                Commencer Maintenant
+              </motion.button>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* App Availability Section */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="relative z-10 container mx-auto px-6 py-32"
+      >
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 mb-6">
+            <Globe className="w-5 h-5 text-purple-400" />
+            <span className="text-purple-300 font-semibold">Disponible Partout</span>
+          </div>
+          <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-red-400 bg-clip-text text-transparent">
+            Téléchargez Sur Vos Appareils
+          </h2>
+          <p className="text-xl text-gray-300 mb-12 max-w-3xl mx-auto">
+            FoxWise Client et FoxWise Worker seront bientôt disponibles sur Google Play Store et Apple App Store
+          </p>
+          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+            <motion.div
+              whileHover={{ scale: 1.05, y: -5 }}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-gray-900 to-gray-800 border border-gray-700 flex items-center gap-4 cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center">
+                <Smartphone className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs text-gray-400">Bientôt sur</div>
+                <div className="text-xl font-bold text-white">Google Play</div>
+              </div>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05, y: -5 }}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-gray-900 to-gray-800 border border-gray-700 flex items-center gap-4 cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                <Smartphone className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs text-gray-400">Bientôt sur</div>
+                <div className="text-xl font-bold text-white">App Store</div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </motion.section>
+
       {/* CTA Section */}
       <section className="relative z-10 container mx-auto px-6 py-32">
         <motion.div
@@ -386,12 +819,13 @@ export default function LandingPage() {
         >
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative z-10">
-            <Users className="w-20 h-20 mx-auto mb-6 text-white" />
+            <Navigation className="w-20 h-20 mx-auto mb-6 text-white" />
             <h2 className="text-6xl font-bold mb-6 text-white">
-              Prêt à Transformer Votre Gestion Client?
+              Prêt à Gérer Votre Équipe Comme un Pro?
             </h2>
             <p className="text-2xl mb-10 text-orange-100 max-w-3xl mx-auto leading-relaxed">
-              Rejoignez des centaines d&apos;entreprises qui gèrent leurs clients intelligemment avec FoxWise Client
+              Rejoignez les entreprises qui transforment leur gestion d&apos;équipe avec GPS 3D,
+              suivi automatique du temps et rapports avancés
             </p>
             <motion.button
               whileHover={{ scale: 1.05, boxShadow: "0 0 60px rgba(255, 255, 255, 0.6)" }}
@@ -400,11 +834,11 @@ export default function LandingPage() {
               className="px-16 py-6 rounded-2xl bg-white text-orange-600 font-bold text-2xl shadow-2xl hover:shadow-white/50 transition-shadow flex items-center gap-4 mx-auto"
             >
               <Briefcase className="w-8 h-8" />
-              Commencer Gratuitement
+              Commencer Maintenant
               <ArrowRight className="w-8 h-8" />
             </motion.button>
             <p className="mt-6 text-orange-100 text-lg">
-              Aucune carte de crédit requise • Gratuit pour toujours
+              Essai gratuit • À partir de $29.99/mois
             </p>
           </div>
         </motion.div>
