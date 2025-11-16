@@ -78,7 +78,18 @@ export default function CalendarPage() {
     })
   }
 
-  const getEventColor = (event: CalendarEvent) => {
+  const getEventColor = (event: any) => {
+    // If job is unassigned, show in gray
+    if (event.event_type === 'job' && !event.assigned_to) {
+      return 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+    }
+
+    // If employee has a color, use it
+    if (event.employee_color) {
+      return `bg-[${event.employee_color}]/20 text-white border border-[${event.employee_color}]/50`
+    }
+
+    // Fallback to status-based colors
     if (event.event_type === 'job') {
       if (event.job?.status === 'completed') return 'bg-green-500/20 text-green-400'
       if (event.job?.priority === 'urgent') return 'bg-red-500/20 text-red-400'
@@ -86,6 +97,29 @@ export default function CalendarPage() {
       return 'bg-blue-500/20 text-blue-400'
     }
     return 'bg-purple-500/20 text-purple-400'
+  }
+
+  const getEventStyle = (event: any) => {
+    // If job is unassigned, return gray style
+    if (event.event_type === 'job' && !event.assigned_to) {
+      return {
+        backgroundColor: 'rgba(107, 114, 128, 0.2)',
+        borderColor: 'rgba(107, 114, 128, 0.3)',
+        color: 'rgb(156, 163, 175)'
+      }
+    }
+
+    // If employee has a color, use it
+    if (event.employee_color) {
+      return {
+        backgroundColor: `${event.employee_color}20`,
+        borderColor: `${event.employee_color}80`,
+        color: 'white'
+      }
+    }
+
+    // Fallback to default
+    return {}
   }
 
   const exportToPDF = () => {
@@ -166,11 +200,12 @@ export default function CalendarPage() {
             {day}
           </div>
           <div className="space-y-1">
-            {dayEvents.slice(0, 2).map((event) => (
+            {dayEvents.slice(0, 2).map((event: any) => (
               <div
                 key={event.id}
-                className={`text-xs px-2 py-1 rounded truncate ${getEventColor(event)}`}
-                title={event.title}
+                className={`text-xs px-2 py-1 rounded truncate border`}
+                style={getEventStyle(event)}
+                title={`${event.title}${event.assigned_to ? '' : ' (Unassigned)'}${event.employee_name ? ` - ${event.employee_name}` : ''}`}
               >
                 {event.title}
               </div>
@@ -288,8 +323,8 @@ export default function CalendarPage() {
       {/* List View */}
       {viewMode === 'list' && (
         <div className="space-y-4">
-          {events.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()).map(event => {
-            const employee = employees.find(e => e.id === event.assigned_to)
+          {events.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()).map((event: any) => {
+            const employee = employees.find(e => e.clerk_user_id === event.assigned_to)
             return (
               <div
                 key={event.id}
@@ -298,10 +333,29 @@ export default function CalendarPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
+                      {/* Employee color indicator */}
+                      {event.employee_color && (
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: event.employee_color }}
+                          title={event.employee_name || 'Assigned employee'}
+                        />
+                      )}
+                      {!event.assigned_to && (
+                        <div
+                          className="w-3 h-3 rounded-full bg-gray-500"
+                          title="Unassigned"
+                        />
+                      )}
                       <h3 className="text-lg font-semibold text-white">{event.title}</h3>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getEventColor(event)}`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium border`} style={getEventStyle(event)}>
                         {event.event_type === 'job' ? 'Job' : 'Événement'}
                       </span>
+                      {!event.assigned_to && (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                          Unassigned
+                        </span>
+                      )}
                     </div>
 
                     {event.description && (
@@ -315,10 +369,10 @@ export default function CalendarPage() {
                         <span>{new Date(event.start_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
 
-                      {employee && (
+                      {event.employee_name && (
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4" />
-                          <span>{employee.full_name || employee.email}</span>
+                          <span style={{ color: event.employee_color || undefined }}>{event.employee_name}</span>
                         </div>
                       )}
 
@@ -326,6 +380,13 @@ export default function CalendarPage() {
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4" />
                           <span>{event.client.name}</span>
+                        </div>
+                      )}
+
+                      {event.job && (
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="w-4 h-4" />
+                          <span className="capitalize">{event.job.status.replace('_', ' ')}</span>
                         </div>
                       )}
                     </div>

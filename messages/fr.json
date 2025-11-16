@@ -1,0 +1,81 @@
+{
+  "navigation": {
+    "dashboard": "Tableau de bord",
+    "calendar": "Calendrier",
+    "clients": "Clients",
+    "jobs": "Jobs",
+    "map": "Carte",
+    "employees": "Employés",
+    "payments": "Paiements",
+    "emails": "Emails",
+    "chat": "Chat",
+    "settings": "Paramètres"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "all": "Tous",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "send": "Envoyer",
+    "export": "Exporter",
+    "viewAll": "Voir tout",
+    "noResults": "Aucun résultat trouvé",
+    "error": "Erreur",
+    "success": "Succès"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "subtitle": "Aperçu de votre entreprise"
+  },
+  "calendar": {
+    "title": "Calendrier",
+    "allEmployees": "Tous les employés",
+    "exportPdf": "Exporter PDF",
+    "unassigned": "Non assigné",
+    "noEvents": "Aucun événement",
+    "noEventsDesc": "Les jobs assignés apparaîtront automatiquement ici"
+  },
+  "clients": {
+    "title": "Clients",
+    "addClient": "Ajouter un Client",
+    "searchPlaceholder": "Rechercher des clients..."
+  },
+  "jobs": {
+    "title": "Jobs",
+    "createJob": "Créer un Job",
+    "searchPlaceholder": "Rechercher des jobs..."
+  },
+  "employees": {
+    "title": "Employés",
+    "inviteEmployee": "Inviter un Employé",
+    "searchPlaceholder": "Rechercher des employés...",
+    "colorPicker": "Couleur (pour calendrier et carte)",
+    "customColor": "Couleur personnalisée"
+  },
+  "payments": {
+    "title": "Paiements",
+    "sendInvoice": "Envoyer Facture",
+    "sendReminder": "Envoyer Rappel"
+  },
+  "emails": {
+    "title": "Marketing Email",
+    "sendCampaign": "Envoyer Campagne",
+    "subjectLine": "Ligne d'objet",
+    "emailContent": "Contenu de l'email",
+    "aiImprove": "Améliorer avec IA",
+    "recipients": "Destinataires",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner"
+  },
+  "chat": {
+    "title": "Chat d'Équipe",
+    "noMessages": "Aucun message. Commencez la conversation!",
+    "typePlaceholder": "Tapez votre message... (Maj+Entrée pour nouvelle ligne)",
+    "voiceComingSoon": "Messagerie vocale bientôt disponible! 🎤"
+  }
+}

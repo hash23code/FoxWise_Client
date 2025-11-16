@@ -1,8 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Search, Edit, Trash2, X, Mail, Shield, Send, Clock, CheckCircle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, X, Mail, Shield, Send, Clock, CheckCircle, Palette } from 'lucide-react'
 import type { Employee, EmployeeInvitation } from '@/types'
+
+const DEFAULT_COLORS = [
+  '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#6366F1',
+  '#8B5CF6', '#EC4899', '#F97316', '#14B8A6', '#06B6D4',
+  '#84CC16', '#F43F5E', '#8B5A00', '#059669', '#7C3AED'
+]
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -16,10 +22,12 @@ export default function EmployeesPage() {
     full_name: string
     email: string
     role: 'manager' | 'employee'
+    color: string
   }>({
     full_name: '',
     email: '',
-    role: 'employee'
+    role: 'employee',
+    color: DEFAULT_COLORS[0]
   })
 
   useEffect(() => {
@@ -60,14 +68,19 @@ export default function EmployeesPage() {
       setFormData({
         full_name: employee.full_name || '',
         email: employee.email,
-        role: employee.role
+        role: employee.role,
+        color: employee.color || DEFAULT_COLORS[0]
       })
     } else {
       setEditingEmployee(null)
+      // Assign next available color for new employees
+      const usedColors = new Set(employees.map(e => e.color))
+      const nextColor = DEFAULT_COLORS.find(c => !usedColors.has(c)) || DEFAULT_COLORS[0]
       setFormData({
         full_name: '',
         email: '',
-        role: 'employee'
+        role: 'employee',
+        color: nextColor
       })
     }
     setShowModal(true)
@@ -269,7 +282,13 @@ export default function EmployeesPage() {
             className="bg-gray-900 border border-gray-800 rounded-xl p-6 hover:border-purple-500/50 transition-all group"
           >
             <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-xl font-bold">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                style={{
+                  backgroundColor: employee.color || '#6366F1',
+                  boxShadow: `0 0 20px ${employee.color || '#6366F1'}40`
+                }}
+              >
                 {employee.full_name?.charAt(0).toUpperCase() || employee.email.charAt(0).toUpperCase()}
               </div>
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -405,6 +424,53 @@ export default function EmployeesPage() {
                   <option value="manager">Gestionnaire</option>
                 </select>
               </div>
+
+              {formData.role === 'employee' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Palette className="w-4 h-4" />
+                      Couleur (pour calendrier et carte)
+                    </div>
+                  </label>
+                  <div className="grid grid-cols-5 gap-3">
+                    {DEFAULT_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, color })}
+                        className={`w-full aspect-square rounded-lg transition-all ${
+                          formData.color === color
+                            ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-900 scale-110'
+                            : 'hover:scale-105'
+                        }`}
+                        style={{
+                          backgroundColor: color,
+                          boxShadow: formData.color === color ? `0 0 20px ${color}60` : 'none'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <label className="block text-xs text-gray-400 mb-1">Couleur personnalisée</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={formData.color}
+                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                        className="w-12 h-10 rounded cursor-pointer bg-gray-800 border border-gray-700"
+                      />
+                      <input
+                        type="text"
+                        value={formData.color}
+                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+                        placeholder="#3B82F6"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-4 pt-4">
                 <button

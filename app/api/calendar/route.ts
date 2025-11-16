@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
+import { getCompanyContext } from '@/lib/company-context'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-// GET - Get calendar events
+// GET - Get calendar events (includes jobs and calendar events)
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -15,12 +11,75 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get company context for multi-tenant isolation
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const assigned_to = searchParams.get('assigned_to')
-    const start_date = searchParams.get('start_date')
-    const end_date = searchParams.get('end_date')
 
-    let query = supabase
+    // Fetch all employees with their colors
+    const { data: employees } = await supabase
+      .from('fc_users')
+      .select('id, clerk_user_id, email, full_name, color, role')
+      .eq('company_id', context.companyId)
+      .eq('role', 'employee')
+
+    const employeeMap = new Map(employees?.map(e => [e.id, e]) || [])
+
+    // Fetch jobs from fc_jobs table
+    let jobsQuery = supabase
+      .from('fc_jobs')
+      .select(`
+        *,
+        client:fc_clients(id, name, email, phone)
+      `)
+      .eq('company_id', context.companyId)
+      .not('scheduled_date', 'is', null)
+
+    // Filter by assigned employee if provided
+    if (assigned_to && assigned_to !== 'all') {
+      jobsQuery = jobsQuery.eq('assigned_to', assigned_to)
+    }
+
+    const { data: jobs, error: jobsError } = await jobsQuery
+
+    if (jobsError) throw jobsError
+
+    // Transform jobs into calendar events format
+    const jobEvents = (jobs || []).map(job => {
+      // Find the employee by clerk_user_id (assigned_to contains clerk_user_id)
+      const employee = employees?.find(e => e.clerk_user_id === job.assigned_to)
+
+      return {
+        id: job.id,
+        user_id: job.user_id,
+        assigned_to: job.assigned_to,
+        title: job.title,
+        description: job.description,
+        start_time: job.scheduled_date,
+        end_time: job.scheduled_date, // Jobs are single day events
+        client_id: job.client_id,
+        job_id: job.id,
+        event_type: 'job' as const,
+        created_at: job.created_at,
+        updated_at: job.updated_at,
+        client: job.client,
+        job: {
+          id: job.id,
+          title: job.title,
+          status: job.status,
+          priority: job.priority
+        },
+        employee_color: employee?.color || null,
+        employee_name: employee?.full_name || employee?.email || null
+      }
+    })
+
+    // Fetch calendar events from fc_calendar_events table (if it exists)
+    let calendarQuery = supabase
       .from('fc_calendar_events')
       .select(`
         *,
@@ -29,22 +88,27 @@ export async function GET(request: NextRequest) {
       `)
       .order('start_time', { ascending: true })
 
-    // Filter by assigned employee if provided
-    if (assigned_to) {
-      query = query.eq('assigned_to', assigned_to)
+    // Apply same filter
+    if (assigned_to && assigned_to !== 'all') {
+      calendarQuery = calendarQuery.eq('assigned_to', assigned_to)
     }
 
-    // Filter by date range if provided
-    if (start_date && end_date) {
-      query = query
-        .gte('start_time', start_date)
-        .lte('end_time', end_date)
-    }
+    const { data: calendarEvents } = await calendarQuery
 
-    const { data, error } = await query
+    // Add employee colors to calendar events
+    const calendarEventsWithColors = (calendarEvents || []).map(event => {
+      const employee = employees?.find(e => e.clerk_user_id === event.assigned_to)
+      return {
+        ...event,
+        employee_color: employee?.color || null,
+        employee_name: employee?.full_name || employee?.email || null
+      }
+    })
 
-    if (error) throw error
-    return NextResponse.json(data || [])
+    // Combine and return all events
+    const allEvents = [...jobEvents, ...calendarEventsWithColors]
+
+    return NextResponse.json(allEvents)
   } catch (error) {
     console.error('Calendar GET error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
