@@ -74,8 +74,9 @@ BEGIN
   WHERE company_id IS NULL;
   RAISE NOTICE '✅ Activités mises à jour: % lignes', (SELECT COUNT(*) FROM fc_activities WHERE company_id = v_company_id);
 
-  -- Job Types (if exists)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'fc_job_types') THEN
+  -- Job Types (if table and column exist)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'fc_job_types') AND
+     EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'fc_job_types' AND column_name = 'company_id') THEN
     UPDATE fc_job_types
     SET company_id = v_company_id
     WHERE company_id IS NULL;
