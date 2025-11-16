@@ -18,7 +18,20 @@ export async function GET() {
       .or(`user_id.eq.${userId},user_id.eq.system`)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('Supabase clients query error:', error)
+      throw error
+    }
+
+    console.log('Clients API: Returning', data?.length, 'clients')
+    if (data && data.length > 0) {
+      console.log('Sample client with sector:', {
+        id: data[0].id,
+        name: data[0].name,
+        sector_id: data[0].sector_id,
+        sector: data[0].sector
+      })
+    }
 
     return NextResponse.json(data || [])
   } catch (error) {

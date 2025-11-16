@@ -99,6 +99,15 @@ export default function JobsPage() {
         const clientsData = await clientsRes.json()
         console.log('Clients loaded:', clientsData.length)
         console.log('Sample client with sector:', clientsData[0])
+        console.log('Client sector field:', clientsData[0]?.sector)
+        console.log('Client sector_id field:', clientsData[0]?.sector_id)
+
+        // Debug: Check all clients for sectors
+        const clientsWithSectors = clientsData.filter((c: any) => c.sector)
+        const clientsWithSectorId = clientsData.filter((c: any) => c.sector_id)
+        console.log(`Clients with sector relation: ${clientsWithSectors.length}/${clientsData.length}`)
+        console.log(`Clients with sector_id: ${clientsWithSectorId.length}/${clientsData.length}`)
+
         setClients(clientsData)
       }
       if (activitiesRes.ok) setActivities(await activitiesRes.json())
@@ -137,6 +146,12 @@ export default function JobsPage() {
     // Initialize map only once
     if (map.current) return
 
+    // CRITICAL: Wait for container to be ready
+    if (!mapContainer.current) {
+      console.log('⏳ Map container not ready yet')
+      return
+    }
+
     // Get API key
     const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY
     if (!apiKey) {
@@ -145,12 +160,13 @@ export default function JobsPage() {
     }
 
     console.log('✅ Mapbox API Key present')
+    console.log('✅ Map container ready:', mapContainer.current)
     mapboxgl.accessToken = apiKey
 
     try {
       // Create map
       map.current = new mapboxgl.Map({
-        container: mapContainer.current!,
+        container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
         center: [-73.5673, 45.5017], // Montreal
         zoom: 11,
@@ -168,7 +184,7 @@ export default function JobsPage() {
     } catch (error) {
       console.error('❌ Error initializing map:', error)
     }
-  }, [])
+  })
 
   // Update job markers on map
   useEffect(() => {
