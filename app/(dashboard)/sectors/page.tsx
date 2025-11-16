@@ -112,8 +112,8 @@ export default function SectorsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Secteurs</h1>
-          <p className="text-gray-400 mt-1">Organisez vos clients par secteur d&apos;activité</p>
+          <h1 className="text-3xl font-bold text-white">Secteurs Géographiques</h1>
+          <p className="text-gray-400 mt-1">Organisez vos clients par zones géographiques</p>
         </div>
         <button
           onClick={() => handleOpenModal()}
@@ -179,7 +179,7 @@ export default function SectorsPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nom du secteur *
+                  Nom du secteur géographique *
                 </label>
                 <input
                   type="text"
@@ -187,7 +187,7 @@ export default function SectorsPage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-orange-500"
-                  placeholder="ex: Construction"
+                  placeholder="ex: Montréal-Nord, Laval, Rive-Sud..."
                 />
               </div>
 
@@ -200,7 +200,7 @@ export default function SectorsPage() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-orange-500"
                   rows={3}
-                  placeholder="Description du secteur..."
+                  placeholder="Description de la zone géographique..."
                 />
               </div>
 
