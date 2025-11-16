@@ -26,7 +26,11 @@ export async function GET() {
         job_type:fc_job_types(*),
         assigned_employee:fc_users!assigned_to(id, email, full_name, role)
       `)
-      .eq('company_id', context.companyId)
+
+    // Only filter by company_id if not in legacy mode
+    if (context.companyId !== 'legacy') {
+      query = query.eq('company_id', context.companyId)
+    }
 
     // Employee filter: only jobs assigned to them
     if (context.role === 'employee') {
@@ -67,14 +71,16 @@ export async function POST(request: Request) {
     console.log('User ID:', userId)
     console.log('Company ID:', context.companyId)
 
-    // Automatically add company_id and user_id
+    // Automatically add company_id and user_id (skip company_id in legacy mode)
+    const insertData = {
+      ...body,
+      user_id: userId,
+      ...(context.companyId !== 'legacy' && { company_id: context.companyId })
+    }
+
     const { data, error } = await supabase
       .from('fc_jobs')
-      .insert([{
-        ...body,
-        user_id: userId,
-        company_id: context.companyId
-      }])
+      .insert([insertData])
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
@@ -135,7 +141,11 @@ export async function PUT(request: Request) {
       .from('fc_jobs')
       .update(body)
       .eq('id', id)
-      .eq('company_id', context.companyId)
+
+    // Only filter by company_id if not in legacy mode
+    if (context.companyId !== 'legacy') {
+      query = query.eq('company_id', context.companyId)
+    }
 
     if (context.role === 'employee') {
       query = query.eq('assigned_to', context.userId)
@@ -184,11 +194,17 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID required' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from('fc_jobs')
       .delete()
       .eq('id', id)
-      .eq('company_id', context.companyId)
+
+    // Only filter by company_id if not in legacy mode
+    if (context.companyId !== 'legacy') {
+      deleteQuery = deleteQuery.eq('company_id', context.companyId)
+    }
+
+    const { error } = await deleteQuery
 
     if (error) throw error
 
