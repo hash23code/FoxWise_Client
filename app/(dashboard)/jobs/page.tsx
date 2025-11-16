@@ -132,46 +132,41 @@ export default function JobsPage() {
     }
   }
 
-  // Initialize map
+  // Initialize map ONCE
   useEffect(() => {
-    if (map.current || !mapContainer.current) return
+    // Initialize map only once
+    if (map.current) return
 
+    // Get API key
     const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY
     if (!apiKey) {
-      console.error('⚠️ MAPBOX API KEY MISSING: Please add NEXT_PUBLIC_MAPBOX_API_KEY to your .env.local file')
-      // Show error message in the map container
-      if (mapContainer.current) {
-        mapContainer.current.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; background: #1f2937; color: white; text-align: center; padding: 20px;">
-            <div>
-              <p style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">⚠️ Configuration requise</p>
-              <p style="color: #9ca3af;">La clé API Mapbox n'est pas configurée.</p>
-              <p style="color: #9ca3af; margin-top: 10px;">Ajoutez <code style="background: #374151; padding: 2px 6px; border-radius: 4px;">NEXT_PUBLIC_MAPBOX_API_KEY</code> dans votre fichier <code style="background: #374151; padding: 2px 6px; border-radius: 4px;">.env.local</code></p>
-            </div>
-          </div>
-        `
-      }
+      console.error('⚠️ MAPBOX API KEY MISSING')
       return
     }
 
+    console.log('✅ Mapbox API Key present')
     mapboxgl.accessToken = apiKey
 
     try {
+      // Create map
       map.current = new mapboxgl.Map({
-        container: mapContainer.current,
+        container: mapContainer.current!,
         style: 'mapbox://styles/mapbox/dark-v11',
         center: [-73.5673, 45.5017], // Montreal
         zoom: 11,
         pitch: 0,
-        bearing: 0
+        bearing: 0,
+        antialias: true
       })
-      console.log('✅ Map initialized successfully')
+
+      console.log('✅ Map 3D created successfully')
+
+      // When map loads
+      map.current.on('load', () => {
+        console.log('✅ Map fully loaded')
+      })
     } catch (error) {
       console.error('❌ Error initializing map:', error)
-    }
-
-    return () => {
-      map.current?.remove()
     }
   }, [])
 
@@ -575,8 +570,8 @@ export default function JobsPage() {
       </div>
 
       {/* Map - Full Width at Top */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-6">
-        <div ref={mapContainer} className="w-full h-[600px]" />
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-6" style={{ height: '600px' }}>
+        <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
       </div>
 
       {/* Jobs Lists - Side by Side */}
