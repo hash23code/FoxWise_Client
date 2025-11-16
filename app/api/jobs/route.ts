@@ -23,8 +23,7 @@ export async function GET() {
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
-        job_type:fc_job_types(*),
-        assigned_employee:fc_users!assigned_to(id, email, full_name, role)
+        job_type:fc_job_types(*)
       `)
       .eq('company_id', context.companyId)
 
@@ -78,8 +77,7 @@ export async function POST(request: Request) {
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
-        job_type:fc_job_types(*),
-        assigned_employee:fc_users!assigned_to(id, email, full_name, role)
+        job_type:fc_job_types(*)
       `)
       .single()
 
@@ -145,8 +143,7 @@ export async function PUT(request: Request) {
       .select(`
         *,
         client:fc_clients(*, sector:fc_sectors(*)),
-        job_type:fc_job_types(*),
-        assigned_employee:fc_users!assigned_to(id, email, full_name, role)
+        job_type:fc_job_types(*)
       `)
       .single()
 
