@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { clientIds, subject, body: emailBody, scheduledAt } = body
 
-    if (!clientIds || (Array.isArray(clientIds) && clientIds.length === 0 && clientIds !== 'all')) {
+    if (!clientIds || (clientIds !== 'all' && (!Array.isArray(clientIds) || clientIds.length === 0))) {
       return NextResponse.json({ error: 'Client IDs are required' }, { status: 400 })
     }
 
