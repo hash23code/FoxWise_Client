@@ -129,10 +129,15 @@ export default function ClientsPage() {
     try {
       const res = await fetch(`/api/clients?id=${id}`, { method: 'DELETE' })
       if (res.ok) {
-        setClients(clients.filter(c => c.id !== id))
+        // Refresh from database to ensure sync
+        await fetchData()
+      } else {
+        const error = await res.json()
+        alert('Erreur lors de la suppression: ' + (error.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error deleting client:', error)
+      alert('Erreur lors de la suppression')
     }
   }
 

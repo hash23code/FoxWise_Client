@@ -109,11 +109,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID required' }, { status: 400 })
     }
 
+    // Allow deletion of both user's clients and system clients
     const { error } = await supabase
       .from('fc_clients')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId)
+      .or(`user_id.eq.${userId},user_id.eq.system`)
 
     if (error) throw error
 
