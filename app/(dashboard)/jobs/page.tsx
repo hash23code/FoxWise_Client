@@ -29,7 +29,6 @@ export default function JobsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingJob, setEditingJob] = useState<Job | null>(null)
   const [formData, setFormData] = useState<{
-    title: string
     description: string
     client_id: string
     activity_id: string
@@ -42,7 +41,6 @@ export default function JobsPage() {
     notes: string
     assigned_to: string
   }>({
-    title: '',
     description: '',
     client_id: '',
     activity_id: '',
@@ -329,7 +327,6 @@ export default function JobsPage() {
                         `${job.client?.address || ''} ${job.client?.city || ''} ${job.client?.postal_code || ''}`.trim()
 
       setFormData({
-        title: job.title,
         description: job.description || '',
         client_id: job.client_id || '',
         activity_id: job.activity_id || '',
@@ -345,7 +342,6 @@ export default function JobsPage() {
     } else {
       setEditingJob(null)
       setFormData({
-        title: '',
         description: '',
         client_id: '',
         activity_id: '',
@@ -409,8 +405,12 @@ export default function JobsPage() {
         }
       }
 
+      // Generate title from activity name
+      const selectedActivity = activities.find(a => a.id === formData.activity_id)
+      const title = selectedActivity ? selectedActivity.name : 'Job sans activité'
+
       const payload: any = {
-        title: formData.title,
+        title,
         description: formData.description || null,
         status: formData.status,
         priority: formData.priority,
@@ -693,19 +693,22 @@ export default function JobsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Title */}
+              {/* Activity - First Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Titre *
+                  Activité *
                 </label>
-                <input
-                  type="text"
+                <select
                   required
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  value={formData.activity_id}
+                  onChange={(e) => setFormData({ ...formData, activity_id: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                  placeholder="Ex: Déneigement résidentiel"
-                />
+                >
+                  <option value="">Sélectionner une activité</option>
+                  {activities.map(activity => (
+                    <option key={activity.id} value={activity.id}>{activity.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Description */}
@@ -722,39 +725,21 @@ export default function JobsPage() {
                 />
               </div>
 
-              {/* Client & Activity */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Client
-                  </label>
-                  <select
-                    value={formData.client_id}
-                    onChange={(e) => handleClientChange(e.target.value)}
-                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                  >
-                    <option value="">Sélectionner un client</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Activité
-                  </label>
-                  <select
-                    value={formData.activity_id}
-                    onChange={(e) => setFormData({ ...formData, activity_id: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                  >
-                    <option value="">Sélectionner une activité</option>
-                    {activities.map(activity => (
-                      <option key={activity.id} value={activity.id}>{activity.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Client */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Client
+                </label>
+                <select
+                  value={formData.client_id}
+                  onChange={(e) => handleClientChange(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                >
+                  <option value="">Sélectionner un client</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Address */}
