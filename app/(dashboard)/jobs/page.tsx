@@ -89,8 +89,18 @@ export default function JobsPage() {
         fetch('/api/employees')
       ])
 
-      if (jobsRes.ok) setJobs(await jobsRes.json())
-      if (clientsRes.ok) setClients(await clientsRes.json())
+      if (jobsRes.ok) {
+        const jobsData = await jobsRes.json()
+        console.log('Jobs loaded:', jobsData.length)
+        console.log('Sample job with client:', jobsData[0])
+        setJobs(jobsData)
+      }
+      if (clientsRes.ok) {
+        const clientsData = await clientsRes.json()
+        console.log('Clients loaded:', clientsData.length)
+        console.log('Sample client with sector:', clientsData[0])
+        setClients(clientsData)
+      }
       if (activitiesRes.ok) setActivities(await activitiesRes.json())
       if (employeesRes.ok) setEmployees(await employeesRes.json())
     } catch (error) {
@@ -128,20 +138,37 @@ export default function JobsPage() {
 
     const apiKey = process.env.NEXT_PUBLIC_MAPBOX_API_KEY
     if (!apiKey) {
-      console.error('No Mapbox API key')
+      console.error('⚠️ MAPBOX API KEY MISSING: Please add NEXT_PUBLIC_MAPBOX_API_KEY to your .env.local file')
+      // Show error message in the map container
+      if (mapContainer.current) {
+        mapContainer.current.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; background: #1f2937; color: white; text-align: center; padding: 20px;">
+            <div>
+              <p style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">⚠️ Configuration requise</p>
+              <p style="color: #9ca3af;">La clé API Mapbox n'est pas configurée.</p>
+              <p style="color: #9ca3af; margin-top: 10px;">Ajoutez <code style="background: #374151; padding: 2px 6px; border-radius: 4px;">NEXT_PUBLIC_MAPBOX_API_KEY</code> dans votre fichier <code style="background: #374151; padding: 2px 6px; border-radius: 4px;">.env.local</code></p>
+            </div>
+          </div>
+        `
+      }
       return
     }
 
     mapboxgl.accessToken = apiKey
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: [-73.5673, 45.5017], // Montreal
-      zoom: 11,
-      pitch: 0,
-      bearing: 0
-    })
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [-73.5673, 45.5017], // Montreal
+        zoom: 11,
+        pitch: 0,
+        bearing: 0
+      })
+      console.log('✅ Map initialized successfully')
+    } catch (error) {
+      console.error('❌ Error initializing map:', error)
+    }
 
     return () => {
       map.current?.remove()
@@ -265,6 +292,7 @@ export default function JobsPage() {
 
   // Get unique sectors from clients
   const sectors = Array.from(new Set(clients.map(c => c.sector?.name).filter(Boolean))) as string[]
+  console.log('Unique sectors found:', sectors)
 
   // Filter jobs
   const filteredJobs = jobs.filter(job => {
