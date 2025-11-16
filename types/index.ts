@@ -1,3 +1,32 @@
+// ==================== COMPANY TYPES ====================
+export interface Company {
+  id: string
+  name: string
+  owner_id: string // Clerk user ID of company owner
+  email: string | null
+  phone: string | null
+  address: string | null
+  subscription_status: 'active' | 'inactive' | 'suspended'
+  subscription_plan: 'free' | 'basic' | 'pro' | 'enterprise'
+  max_employees: number
+  created_at: string
+  updated_at: string
+}
+
+export interface EmployeeInvitation {
+  id: string
+  company_id: string
+  email: string
+  full_name: string | null
+  role: 'employee'
+  invited_by: string // Clerk user ID
+  invitation_token: string
+  status: 'pending' | 'accepted' | 'expired'
+  expires_at: string
+  accepted_at: string | null
+  created_at: string
+}
+
 // ==================== USER TYPES ====================
 export interface User {
   id: string
@@ -5,8 +34,14 @@ export interface User {
   email: string
   full_name: string | null
   role: 'manager' | 'employee'
+  company_id: string | null
+  invitation_status: string | null
+  invitation_token: string | null
+  invited_at: string | null
+  invited_by: string | null
   created_at: string
   updated_at: string
+  company?: Company
 }
 
 // Employee is a User with role 'employee'
@@ -16,6 +51,7 @@ export type Employee = User
 export interface Sector {
   id: string
   user_id: string
+  company_id: string | null
   name: string
   description: string | null
   color: string
@@ -26,6 +62,7 @@ export interface Sector {
 export interface Activity {
   id: string
   user_id: string
+  company_id: string | null
   name: string
   description: string | null
   default_cost: number | null
@@ -48,6 +85,7 @@ export interface ClientActivity {
 export interface Client {
   id: string
   user_id: string
+  company_id: string | null
   name: string
   email: string | null
   phone: string | null
@@ -70,6 +108,7 @@ export interface Client {
 export interface JobType {
   id: string
   user_id: string
+  company_id: string | null
   name: string
   description: string | null
   default_cost: number | null
@@ -79,6 +118,7 @@ export interface JobType {
 export interface Job {
   id: string
   user_id: string
+  company_id: string | null
   client_id: string
   assigned_to: string | null
   activity_id: string | null
