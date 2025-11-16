@@ -1,0 +1,81 @@
+{
+  "navigation": {
+    "dashboard": "Dashboard",
+    "calendar": "Calendar",
+    "clients": "Clients",
+    "jobs": "Jobs",
+    "map": "Map",
+    "employees": "Employees",
+    "payments": "Payments",
+    "emails": "Emails",
+    "chat": "Chat",
+    "settings": "Settings"
+  },
+  "common": {
+    "loading": "Loading...",
+    "search": "Search",
+    "filter": "Filter",
+    "all": "All",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "send": "Send",
+    "export": "Export",
+    "viewAll": "View all",
+    "noResults": "No results found",
+    "error": "Error",
+    "success": "Success"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Overview of your business"
+  },
+  "calendar": {
+    "title": "Calendar",
+    "allEmployees": "All employees",
+    "exportPdf": "Export PDF",
+    "unassigned": "Unassigned",
+    "noEvents": "No events",
+    "noEventsDesc": "Assigned jobs will appear here automatically"
+  },
+  "clients": {
+    "title": "Clients",
+    "addClient": "Add Client",
+    "searchPlaceholder": "Search clients..."
+  },
+  "jobs": {
+    "title": "Jobs",
+    "createJob": "Create Job",
+    "searchPlaceholder": "Search jobs..."
+  },
+  "employees": {
+    "title": "Employees",
+    "inviteEmployee": "Invite Employee",
+    "searchPlaceholder": "Search employees...",
+    "colorPicker": "Color (for calendar and map)",
+    "customColor": "Custom color"
+  },
+  "payments": {
+    "title": "Payments",
+    "sendInvoice": "Send Invoice",
+    "sendReminder": "Send Reminder"
+  },
+  "emails": {
+    "title": "Email Marketing",
+    "sendCampaign": "Send Campaign",
+    "subjectLine": "Subject Line",
+    "emailContent": "Email Content",
+    "aiImprove": "AI Improve",
+    "recipients": "Recipients",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All"
+  },
+  "chat": {
+    "title": "Team Chat",
+    "noMessages": "No messages yet. Start the conversation!",
+    "typePlaceholder": "Type your message... (Shift+Enter for new line)",
+    "voiceComingSoon": "Voice messaging coming soon! 🎤"
+  }
+}
