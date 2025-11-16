@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCompanyContext } from '@/lib/company-context'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - Get all employees
+// GET - Get all employees for the company
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -15,24 +16,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get company context
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
     if (id) {
-      // Get specific employee
+      // Get specific employee - ensure it's from the same company
       const { data, error } = await supabase
         .from('fc_users')
         .select('*')
         .eq('id', id)
+        .eq('company_id', context.companyId)
         .single()
 
       if (error) throw error
       return NextResponse.json(data)
     } else {
-      // Get all employees
+      // Get all employees in the company
       const { data, error } = await supabase
         .from('fc_users')
         .select('*')
+        .eq('company_id', context.companyId)
         .order('full_name', { ascending: true })
 
       if (error) throw error
@@ -44,12 +53,22 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new employee
+// POST - Create new employee (manager only)
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Only managers can create employees
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can create employees' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -60,7 +79,10 @@ export async function POST(request: NextRequest) {
         clerk_user_id: body.clerk_user_id || 'temp_' + Date.now(), // Temporary ID until Clerk integration
         email: body.email,
         full_name: body.full_name,
-        role: body.role || 'employee'
+        role: body.role || 'employee',
+        company_id: context.companyId, // Automatically assign to manager's company
+        invited_by: userId,
+        invited_at: new Date().toISOString()
       }])
       .select()
       .single()
@@ -73,12 +95,22 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Update employee
+// PUT - Update employee (manager only)
 export async function PUT(request: NextRequest) {
   try {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Only managers can update employees
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can update employees' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -98,6 +130,7 @@ export async function PUT(request: NextRequest) {
         role: body.role
       })
       .eq('id', id)
+      .eq('company_id', context.companyId) // Ensure same company
       .select()
       .single()
 
@@ -109,12 +142,22 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - Delete employee
+// DELETE - Delete employee (manager only)
 export async function DELETE(request: NextRequest) {
   try {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Only managers can delete employees
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can delete employees' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -128,6 +171,7 @@ export async function DELETE(request: NextRequest) {
       .from('fc_users')
       .delete()
       .eq('id', id)
+      .eq('company_id', context.companyId) // Ensure same company
 
     if (error) throw error
     return NextResponse.json({ success: true })

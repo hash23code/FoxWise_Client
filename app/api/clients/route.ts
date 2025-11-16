@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabase } from '@/lib/supabase'
+import { getCompanyContext } from '@/lib/company-context'
 
 export async function GET() {
   try {
@@ -9,13 +10,19 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get company context for multi-tenant isolation
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
     const { data, error } = await supabase
       .from('fc_clients')
       .select(`
         *,
         sector:fc_sectors(*)
       `)
-      .or(`user_id.eq.${userId},user_id.eq.system`)
+      .eq('company_id', context.companyId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -23,7 +30,7 @@ export async function GET() {
       throw error
     }
 
-    console.log('Clients API: Returning', data?.length, 'clients')
+    console.log('Clients API: Returning', data?.length, 'clients for company', context.companyId)
     if (data && data.length > 0) {
       console.log('Sample client with sector:', {
         id: data[0].id,
@@ -47,10 +54,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get company context
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Only managers can create clients
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can create clients' }, { status: 403 })
+    }
+
     const body = await request.json()
     const { data, error } = await supabase
       .from('fc_clients')
-      .insert([{ ...body, user_id: userId }])
+      .insert([{
+        ...body,
+        user_id: userId,
+        company_id: context.companyId
+      }])
       .select()
       .single()
 
@@ -70,6 +92,17 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get company context
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Only managers can update clients
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can update clients' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -82,7 +115,7 @@ export async function PUT(request: Request) {
       .from('fc_clients')
       .update(body)
       .eq('id', id)
-      .eq('user_id', userId)
+      .eq('company_id', context.companyId)
       .select()
       .single()
 
@@ -102,6 +135,17 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get company context
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Only managers can delete clients
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can delete clients' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -109,12 +153,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID required' }, { status: 400 })
     }
 
-    // Allow deletion of both user's clients and system clients
+    // Delete client only within this company
     const { error } = await supabase
       .from('fc_clients')
       .delete()
       .eq('id', id)
-      .or(`user_id.eq.${userId},user_id.eq.system`)
+      .eq('company_id', context.companyId)
 
     if (error) throw error
 
