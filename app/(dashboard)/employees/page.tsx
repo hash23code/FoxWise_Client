@@ -1,15 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Search, Edit, Trash2, X, User as UserIcon, Mail, Shield, Users } from 'lucide-react'
-import type { Employee } from '@/types'
+import { Plus, Search, Edit, Trash2, X, Mail, Shield, Send, Clock, CheckCircle } from 'lucide-react'
+import type { Employee, EmployeeInvitation } from '@/types'
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [invitations, setInvitations] = useState<EmployeeInvitation[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [sending, setSending] = useState(false)
   const [formData, setFormData] = useState<{
     full_name: string
     email: string
@@ -21,18 +23,27 @@ export default function EmployeesPage() {
   })
 
   useEffect(() => {
-    fetchEmployees()
+    fetchData()
   }, [])
 
-  const fetchEmployees = async () => {
+  const fetchData = async () => {
     try {
-      const res = await fetch('/api/employees')
-      if (res.ok) {
-        const data = await res.json()
+      const [employeesRes, invitationsRes] = await Promise.all([
+        fetch('/api/employees'),
+        fetch('/api/invitations')
+      ])
+
+      if (employeesRes.ok) {
+        const data = await employeesRes.json()
         setEmployees(data)
       }
+
+      if (invitationsRes.ok) {
+        const data = await invitationsRes.json()
+        setInvitations(data)
+      }
     } catch (error) {
-      console.error('Error fetching employees:', error)
+      console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
     }
@@ -69,27 +80,82 @@ export default function EmployeesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSending(true)
 
     try {
-      const url = editingEmployee ? `/api/employees?id=${editingEmployee.id}` : '/api/employees'
-      const method = editingEmployee ? 'PUT' : 'POST'
+      if (editingEmployee) {
+        // Update existing employee
+        const res = await fetch(`/api/employees?id=${editingEmployee.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        })
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Erreur inconnue')
+        }
+      } else {
+        // Send invitation for new employee
+        const res = await fetch('/api/invitations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        })
+
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Erreur inconnue')
+        }
+
+        alert('Invitation envoyée avec succès! L&apos;employé recevra un email pour accepter l&apos;invitation.')
+      }
+
+      await fetchData()
+      handleCloseModal()
+    } catch (error: any) {
+      console.error('Error saving employee:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleResendInvitation = async (invitationId: string) => {
+    try {
+      const res = await fetch(`/api/invitations?id=${invitationId}`, {
+        method: 'PUT'
       })
 
-      if (res.ok) {
-        await fetchEmployees()
-        handleCloseModal()
-      } else {
+      if (!res.ok) {
         const error = await res.json()
-        alert('Erreur: ' + (error.error || 'Erreur inconnue'))
+        throw new Error(error.error || 'Erreur inconnue')
       }
-    } catch (error) {
-      console.error('Error saving employee:', error)
-      alert('Erreur lors de la sauvegarde')
+
+      alert('Invitation renvoyée avec succès!')
+    } catch (error: any) {
+      console.error('Error resending invitation:', error)
+      alert('Erreur: ' + error.message)
+    }
+  }
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir annuler cette invitation?')) return
+
+    try {
+      const res = await fetch(`/api/invitations?id=${invitationId}`, {
+        method: 'DELETE'
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Erreur inconnue')
+      }
+
+      await fetchData()
+    } catch (error: any) {
+      console.error('Error canceling invitation:', error)
+      alert('Erreur: ' + error.message)
     }
   }
 
@@ -99,7 +165,7 @@ export default function EmployeesPage() {
     try {
       const res = await fetch(`/api/employees?id=${id}`, { method: 'DELETE' })
       if (res.ok) {
-        setEmployees(employees.filter(e => e.id !== id))
+        await fetchData()
       }
     } catch (error) {
       console.error('Error deleting employee:', error)
@@ -114,19 +180,24 @@ export default function EmployeesPage() {
     )
   }
 
+  const pendingInvitations = invitations.filter(inv => inv.status === 'pending')
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Employés</h1>
-          <p className="text-gray-400 mt-1">{filteredEmployees.length} employé{filteredEmployees.length > 1 ? 's' : ''}</p>
+          <p className="text-gray-400 mt-1">
+            {employees.length} employé{employees.length > 1 ? 's' : ''}
+            {pendingInvitations.length > 0 && ` · ${pendingInvitations.length} invitation${pendingInvitations.length > 1 ? 's' : ''} en attente`}
+          </p>
         </div>
         <button
           onClick={() => handleOpenModal()}
           className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all flex items-center gap-2 shadow-lg"
         >
           <Plus className="w-5 h-5" />
-          Nouvel Employé
+          Inviter un Employé
         </button>
       </div>
 
@@ -141,6 +212,54 @@ export default function EmployeesPage() {
           className="w-full pl-10 pr-4 py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
       </div>
+
+      {/* Pending Invitations */}
+      {pendingInvitations.length > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="w-5 h-5 text-yellow-400" />
+            <h2 className="text-lg font-semibold text-yellow-200">
+              Invitations en attente ({pendingInvitations.length})
+            </h2>
+          </div>
+          <div className="space-y-3">
+            {pendingInvitations.map((invitation) => (
+              <div
+                key={invitation.id}
+                className="bg-gray-900/50 rounded-lg p-4 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-yellow-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{invitation.full_name || invitation.email}</p>
+                    <p className="text-sm text-gray-400">{invitation.email}</p>
+                    <p className="text-xs text-gray-500">
+                      Expire le {new Date(invitation.expires_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleResendInvitation(invitation.id)}
+                    className="px-3 py-2 text-sm bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-colors flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Renvoyer
+                  </button>
+                  <button
+                    onClick={() => handleCancelInvitation(invitation.id)}
+                    className="px-3 py-2 text-sm bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Employees Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -202,7 +321,7 @@ export default function EmployeesPage() {
           </h2>
           <p className="text-gray-400 mb-6">
             {employees.length === 0
-              ? 'Commencez par ajouter votre premier employé'
+              ? 'Commencez par inviter votre premier employé'
               : 'Essayez de modifier votre recherche'}
           </p>
           {employees.length === 0 && (
@@ -210,7 +329,7 @@ export default function EmployeesPage() {
               onClick={() => handleOpenModal()}
               className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all"
             >
-              Ajouter votre premier employé
+              Inviter votre premier employé
             </button>
           )}
         </div>
@@ -222,7 +341,7 @@ export default function EmployeesPage() {
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-white">
-                {editingEmployee ? 'Modifier l\'Employé' : 'Nouvel Employé'}
+                {editingEmployee ? 'Modifier l&apos;Employé' : 'Inviter un Employé'}
               </h2>
               <button
                 onClick={handleCloseModal}
@@ -231,6 +350,14 @@ export default function EmployeesPage() {
                 <X className="w-6 h-6" />
               </button>
             </div>
+
+            {!editingEmployee && (
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4 mb-6">
+                <p className="text-sm text-purple-200">
+                  📧 Un email d&apos;invitation sera envoyé à cet employé avec un lien pour créer son compte.
+                </p>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -258,7 +385,11 @@ export default function EmployeesPage() {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
                   placeholder="jean@example.com"
+                  disabled={!!editingEmployee}
                 />
+                {editingEmployee && (
+                  <p className="text-xs text-gray-500 mt-1">L&apos;email ne peut pas être modifié</p>
+                )}
               </div>
 
               <div>
@@ -278,9 +409,22 @@ export default function EmployeesPage() {
               <div className="flex gap-4 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all"
+                  disabled={sending}
+                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {editingEmployee ? 'Mettre à jour' : 'Créer'}
+                  {sending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Envoi...
+                    </>
+                  ) : editingEmployee ? (
+                    'Mettre à jour'
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Envoyer l&apos;invitation
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"

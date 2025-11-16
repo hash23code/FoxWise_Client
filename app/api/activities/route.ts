@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabase } from '@/lib/supabase'
+import { getCompanyContext } from '@/lib/company-context'
 
 export async function GET() {
   try {
@@ -9,11 +10,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get activities for this user OR system default activities
+    // Get company context
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    // Get activities for this company
     const { data, error } = await supabase
       .from('fc_activities')
       .select('*')
-      .or(`user_id.eq.${userId},user_id.eq.system`)
+      .eq('company_id', context.companyId)
       .order('name', { ascending: true })
 
     if (error) throw error
@@ -32,12 +39,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can create activities' }, { status: 403 })
+    }
+
     const body = await request.json()
 
     const { data, error } = await supabase
       .from('fc_activities')
       .insert([{
         user_id: userId,
+        company_id: context.companyId,
         name: body.name,
         description: body.description,
         default_cost: body.default_cost,
@@ -63,6 +80,15 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can update activities' }, { status: 403 })
+    }
+
     const body = await request.json()
     const { id, ...updateData } = body
 
@@ -70,7 +96,7 @@ export async function PUT(request: Request) {
       .from('fc_activities')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', userId) // Only allow updating own activities
+      .eq('company_id', context.companyId)
       .select()
       .single()
 
@@ -90,6 +116,15 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const context = await getCompanyContext(userId)
+    if (!context) {
+      return NextResponse.json({ error: 'User not found or no company assigned' }, { status: 403 })
+    }
+
+    if (context.role !== 'manager') {
+      return NextResponse.json({ error: 'Only managers can delete activities' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -101,7 +136,7 @@ export async function DELETE(request: Request) {
       .from('fc_activities')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId) // Only allow deleting own activities
+      .eq('company_id', context.companyId)
 
     if (error) throw error
 
