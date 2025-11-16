@@ -50,9 +50,18 @@ export async function getCompanyContext(clerkUserId: string): Promise<CompanyCon
       return null
     }
 
+    // BACKWARD COMPATIBILITY: If no company_id, user is in legacy mode
+    // This allows the app to work before the multi-tenant migration is applied
     if (!user.company_id) {
-      console.error('User has no company_id:', clerkUserId)
-      return null
+      console.warn('⚠️ User has no company_id - running in legacy mode. Please apply the multi-tenant migration!')
+      // Return a temporary context that allows the app to function
+      return {
+        companyId: 'legacy', // Special marker for legacy mode
+        userId: user.id,
+        role: user.role || 'manager',
+        email: user.email,
+        fullName: user.full_name
+      }
     }
 
     return {
