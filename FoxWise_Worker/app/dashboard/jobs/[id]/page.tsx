@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, MapPin, Clock, User, Phone, Mail,
   Navigation, CheckCircle, PlayCircle, AlertCircle,
-  FileText, Building2
+  FileText, Building2, Briefcase
 } from 'lucide-react'
 import Link from 'next/link'
 import type { Job } from '@/types'
