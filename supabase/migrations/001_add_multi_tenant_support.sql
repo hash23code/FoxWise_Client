@@ -72,10 +72,15 @@ BEGIN
   END IF;
 END $$;
 
--- Geolocation
-ALTER TABLE fc_geolocation
-ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES fc_companies(id) ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS idx_fc_geolocation_company_id ON fc_geolocation(company_id);
+-- Geolocation (if exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'fc_geolocation') THEN
+    ALTER TABLE fc_geolocation
+    ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES fc_companies(id) ON DELETE CASCADE;
+    CREATE INDEX IF NOT EXISTS idx_fc_geolocation_company_id ON fc_geolocation(company_id);
+  END IF;
+END $$;
 
 -- Email Logs (if exists)
 DO $$
@@ -172,8 +177,15 @@ ALTER TABLE fc_clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_sectors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_activities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fc_geolocation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_employee_invitations ENABLE ROW LEVEL SECURITY;
+
+-- Enable RLS on fc_geolocation if it exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'fc_geolocation') THEN
+    ALTER TABLE fc_geolocation ENABLE ROW LEVEL SECURITY;
+  END IF;
+END $$;
 
 -- Note: RLS policies will be managed at the application level using service role key
 -- For now, we'll use service role key which bypasses RLS
