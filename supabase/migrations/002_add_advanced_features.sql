@@ -358,8 +358,11 @@ CREATE TRIGGER update_fc_chat_messages_updated_at BEFORE UPDATE ON fc_chat_messa
 -- MIGRATION COMPLETE
 -- ============================================================================
 
-RAISE NOTICE '✅ Migration 002 completed successfully!';
-RAISE NOTICE '📊 Added employee color assignments';
-RAISE NOTICE '💰 Added payment tracking system';
-RAISE NOTICE '📧 Added email campaign system';
-RAISE NOTICE '💬 Added real-time chat system';
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Migration 002 completed successfully!';
+  RAISE NOTICE '📊 Added employee color assignments';
+  RAISE NOTICE '💰 Added payment tracking system';
+  RAISE NOTICE '📧 Added email campaign system';
+  RAISE NOTICE '💬 Added real-time chat system';
+END $$;
