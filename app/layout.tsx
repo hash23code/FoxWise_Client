@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from '@clerk/nextjs'
+import { NextIntlClientProvider } from 'next-intl'
+import { getMessages } from 'next-intl/server'
+import { cookies } from 'next/headers'
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,11 +10,16 @@ export const metadata: Metadata = {
   description: "Application complète de gestion de clients avec intelligence artificielle",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Get locale from cookie or default to 'en'
+  const cookieStore = await cookies()
+  const locale = cookieStore.get('NEXT_LOCALE')?.value || 'en'
+  const messages = await getMessages()
+
   return (
     <ClerkProvider
       appearance={{
@@ -33,9 +41,11 @@ export default function RootLayout({
         },
       }}
     >
-      <html lang="fr">
+      <html lang={locale}>
         <body className="antialiased">
-          {children}
+          <NextIntlClientProvider messages={messages} locale={locale}>
+            {children}
+          </NextIntlClientProvider>
         </body>
       </html>
     </ClerkProvider>
