@@ -147,7 +147,7 @@ export default function AcceptInvitationPage() {
           <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-3xl">🦊</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">You're Invited!</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">You&apos;re Invited!</h1>
           <p className="text-gray-300">Join your team on FoxWise</p>
         </div>
 

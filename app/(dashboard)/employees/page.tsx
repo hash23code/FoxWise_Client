@@ -108,7 +108,7 @@ export default function EmployeesPage() {
           throw new Error(error.error || 'Erreur inconnue')
         }
 
-        alert('Invitation envoyée avec succès! L\'employé recevra un email pour accepter l\'invitation.')
+        alert('Invitation envoyée avec succès! L&apos;employé recevra un email pour accepter l&apos;invitation.')
       }
 
       await fetchData()
@@ -341,7 +341,7 @@ export default function EmployeesPage() {
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-white">
-                {editingEmployee ? 'Modifier l\'Employé' : 'Inviter un Employé'}
+                {editingEmployee ? 'Modifier l&apos;Employé' : 'Inviter un Employé'}
               </h2>
               <button
                 onClick={handleCloseModal}
@@ -354,7 +354,7 @@ export default function EmployeesPage() {
             {!editingEmployee && (
               <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4 mb-6">
                 <p className="text-sm text-purple-200">
-                  📧 Un email d'invitation sera envoyé à cet employé avec un lien pour créer son compte.
+                  📧 Un email d&apos;invitation sera envoyé à cet employé avec un lien pour créer son compte.
                 </p>
               </div>
             )}
@@ -388,7 +388,7 @@ export default function EmployeesPage() {
                   disabled={!!editingEmployee}
                 />
                 {editingEmployee && (
-                  <p className="text-xs text-gray-500 mt-1">L'email ne peut pas être modifié</p>
+                  <p className="text-xs text-gray-500 mt-1">L&apos;email ne peut pas être modifié</p>
                 )}
               </div>
 
@@ -422,7 +422,7 @@ export default function EmployeesPage() {
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      Envoyer l'invitation
+                      Envoyer l&apos;invitation
                     </>
                   )}
                 </button>
