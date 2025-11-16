@@ -127,7 +127,8 @@ export async function PUT(request: NextRequest) {
       .update({
         email: body.email,
         full_name: body.full_name,
-        role: body.role
+        role: body.role,
+        color: body.color || null
       })
       .eq('id', id)
       .eq('company_id', context.companyId) // Ensure same company

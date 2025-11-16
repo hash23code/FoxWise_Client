@@ -35,6 +35,7 @@ export interface User {
   full_name: string | null
   role: 'manager' | 'employee'
   company_id: string | null
+  color: string | null  // Employee color for calendar/map visualization
   invitation_status: string | null
   invitation_token: string | null
   invited_at: string | null
