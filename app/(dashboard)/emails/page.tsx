@@ -354,7 +354,7 @@ export default function EmailsPage() {
               <div>
                 <h4 className="font-semibold text-purple-200 mb-1">AI Writing Assistant</h4>
                 <p className="text-sm text-purple-300/80">
-                  Click "AI Improve" to enhance your subject line and email content for better engagement and professionalism.
+                  Click &quot;AI Improve&quot; to enhance your subject line and email content for better engagement and professionalism.
                 </p>
               </div>
             </div>
