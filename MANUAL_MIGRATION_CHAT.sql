@@ -100,8 +100,8 @@ CREATE POLICY "Users can view rooms in their company" ON fc_chat_rooms
   FOR SELECT
   USING (
     company_id IN (
-      SELECT company_id FROM fc_employees
-      WHERE clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+      SELECT e.company_id FROM fc_employees e
+      WHERE e.clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
     )
   );
 
@@ -110,8 +110,8 @@ CREATE POLICY "Users can create rooms in their company" ON fc_chat_rooms
   FOR INSERT
   WITH CHECK (
     company_id IN (
-      SELECT company_id FROM fc_employees
-      WHERE clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+      SELECT e.company_id FROM fc_employees e
+      WHERE e.clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
     )
   );
 
@@ -119,10 +119,10 @@ CREATE POLICY "Users can create rooms in their company" ON fc_chat_rooms
 CREATE POLICY "Users can view their room memberships" ON fc_chat_room_members
   FOR SELECT
   USING (
-    fc_chat_room_members.room_id IN (
-      SELECT fc_chat_rooms.id FROM fc_chat_rooms WHERE fc_chat_rooms.company_id IN (
-        SELECT company_id FROM fc_employees
-        WHERE clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    room_id IN (
+      SELECT r.id FROM fc_chat_rooms r WHERE r.company_id IN (
+        SELECT e.company_id FROM fc_employees e
+        WHERE e.clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
       )
     )
   );
@@ -131,10 +131,10 @@ CREATE POLICY "Users can view their room memberships" ON fc_chat_room_members
 CREATE POLICY "Users can join rooms in their company" ON fc_chat_room_members
   FOR INSERT
   WITH CHECK (
-    fc_chat_room_members.room_id IN (
-      SELECT fc_chat_rooms.id FROM fc_chat_rooms WHERE fc_chat_rooms.company_id IN (
-        SELECT company_id FROM fc_employees
-        WHERE clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    room_id IN (
+      SELECT r.id FROM fc_chat_rooms r WHERE r.company_id IN (
+        SELECT e.company_id FROM fc_employees e
+        WHERE e.clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
       )
     )
   );
@@ -143,9 +143,9 @@ CREATE POLICY "Users can join rooms in their company" ON fc_chat_room_members
 CREATE POLICY "Users can view messages in their rooms" ON fc_chat_messages
   FOR SELECT
   USING (
-    fc_chat_messages.room_id IN (
-      SELECT fc_chat_room_members.room_id FROM fc_chat_room_members
-      WHERE fc_chat_room_members.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    room_id IN (
+      SELECT m.room_id FROM fc_chat_room_members m
+      WHERE m.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
     )
   );
 
@@ -153,9 +153,9 @@ CREATE POLICY "Users can view messages in their rooms" ON fc_chat_messages
 CREATE POLICY "Users can send messages to their rooms" ON fc_chat_messages
   FOR INSERT
   WITH CHECK (
-    fc_chat_messages.room_id IN (
-      SELECT fc_chat_room_members.room_id FROM fc_chat_room_members
-      WHERE fc_chat_room_members.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    room_id IN (
+      SELECT m.room_id FROM fc_chat_room_members m
+      WHERE m.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
     )
   );
 
@@ -163,17 +163,17 @@ CREATE POLICY "Users can send messages to their rooms" ON fc_chat_messages
 CREATE POLICY "Users can mark messages as read" ON fc_chat_message_reads
   FOR INSERT
   WITH CHECK (
-    fc_chat_message_reads.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    user_id = current_setting('request.jwt.claims', true)::json->>'sub'
   );
 
 -- Chat Message Reads: Users can view read status
 CREATE POLICY "Users can view read status in their rooms" ON fc_chat_message_reads
   FOR SELECT
   USING (
-    fc_chat_message_reads.message_id IN (
-      SELECT fc_chat_messages.id FROM fc_chat_messages WHERE fc_chat_messages.room_id IN (
-        SELECT fc_chat_room_members.room_id FROM fc_chat_room_members
-        WHERE fc_chat_room_members.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    message_id IN (
+      SELECT msg.id FROM fc_chat_messages msg WHERE msg.room_id IN (
+        SELECT m.room_id FROM fc_chat_room_members m
+        WHERE m.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
       )
     )
   );
@@ -195,8 +195,8 @@ BEGIN
      LIMIT 1)
   FROM fc_companies c
   WHERE NOT EXISTS (
-    SELECT 1 FROM fc_chat_rooms
-    WHERE company_id = c.id AND type = 'company'
+    SELECT 1 FROM fc_chat_rooms cr
+    WHERE cr.company_id = c.id AND cr.type = 'company'
   )
   AND EXISTS (
     SELECT 1 FROM fc_employees e
@@ -218,8 +218,8 @@ BEGIN
   JOIN fc_employees e ON e.company_id = r.company_id
   WHERE r.type = 'company'
     AND NOT EXISTS (
-      SELECT 1 FROM fc_chat_room_members
-      WHERE room_id = r.id AND user_id = e.clerk_user_id
+      SELECT 1 FROM fc_chat_room_members crm
+      WHERE crm.room_id = r.id AND crm.user_id = e.clerk_user_id
     );
 EXCEPTION
   WHEN OTHERS THEN
