@@ -26,7 +26,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [isSaved, setIsSaved] = useState(false)
   const [settings, setSettings] = useState({
-    language: 'fr',
+    language: 'en',
     timezone: 'America/Toronto',
     theme: 'dark',
     notifications: {
@@ -52,7 +52,7 @@ export default function SettingsPage() {
         if (data) {
           setSettings(prev => ({
             ...prev,
-            language: data.language || 'fr',
+            language: data.language || 'en',
             timezone: data.timezone || 'America/Toronto',
             theme: data.theme || 'dark',
             notifications: data.notifications || prev.notifications,
@@ -74,8 +74,16 @@ export default function SettingsPage() {
       })
 
       if (response.ok) {
+        // Set locale cookie for i18n
+        document.cookie = `NEXT_LOCALE=${settings.language}; path=/; max-age=31536000; SameSite=Lax`
+
         setIsSaved(true)
         setTimeout(() => setIsSaved(false), 2000)
+
+        // Reload page to apply language change
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
       }
     } catch (error) {
       console.error('Error saving settings:', error)
