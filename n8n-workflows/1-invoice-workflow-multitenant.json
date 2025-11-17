@@ -1,0 +1,202 @@
+{
+  "name": "FoxWise - Factures (Multi-tenant)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoice-mt",
+        "responseMode": "onReceived",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-invoice",
+      "name": "Webhook - Réception",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "foxwise-invoice-mt"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extraire les données reçues de FoxWise\nconst body = $json.body;\n\nreturn {\n  clientIds: body.clientIds || [],\n  type: body.type || 'invoice',\n  customMessage: body.customMessage || '',\n  companyId: body.companyId,\n  \n  // Credentials SMTP du client (envoyés par FoxWise)\n  smtpHost: body.smtpHost,\n  smtpPort: body.smtpPort,\n  smtpUser: body.smtpUser,\n  smtpPassword: body.smtpPassword,\n  fromEmail: body.fromEmail,\n  fromName: body.fromName,\n  \n  // Supabase config\n  supabaseUrl: body.supabaseUrl,\n  supabaseKey: body.supabaseKey\n};"
+      },
+      "id": "parse-data",
+      "name": "Parser les données",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$node['Parser les données'].json.supabaseUrl}}/rest/v1/rpc/get_clients_by_ids",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$node['Parser les données'].json.supabaseKey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{$node['Parser les données'].json.supabaseKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_ids",
+              "value": "={{$node['Parser les données'].json.clientIds}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-clients",
+      "name": "Récupérer les clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Pour chaque client, créer un email personnalisé\nconst clients = $input.all();\nconst parsedData = $node['Parser les données'].json;\nconst type = parsedData.type;\nconst customMessage = parsedData.customMessage;\n\nconst emails = [];\n\nfor (const item of clients) {\n  const client = item.json;\n  \n  let subject, body;\n  \n  if (type === 'invoice') {\n    subject = `Facture - ${client.name || 'Client'}`;\n    body = `\nBonjour ${client.name || 'Client'},\n\nVeuillez trouver ci-joint votre facture.\n\n${customMessage ? customMessage + '\\n\\n' : ''}\nMerci de votre confiance!\n\n${parsedData.fromName || 'Votre équipe'}\n    `.trim();\n  } else {\n    subject = `Rappel de paiement - ${client.name || 'Client'}`;\n    body = `\nBonjour ${client.name || 'Client'},\n\nCeci est un rappel amical concernant votre paiement en attente.\n\n${customMessage ? customMessage + '\\n\\n' : ''}\nMerci de votre attention!\n\n${parsedData.fromName || 'Votre équipe'}\n    `.trim();\n  }\n  \n  emails.push({\n    to: client.email,\n    subject: subject,\n    body: body,\n    clientName: client.name,\n    // Passer les credentials SMTP\n    smtpHost: parsedData.smtpHost,\n    smtpPort: parsedData.smtpPort,\n    smtpUser: parsedData.smtpUser,\n    smtpPassword: parsedData.smtpPassword,\n    fromEmail: parsedData.fromEmail || parsedData.smtpUser,\n    fromName: parsedData.fromName\n  });\n}\n\nreturn emails;"
+      },
+      "id": "prepare-emails",
+      "name": "Préparer les emails",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "id": "split-batch",
+      "name": "Diviser en lots",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// UTILISE NODEMAILER AVEC CREDENTIALS DYNAMIQUES\nconst nodemailer = require('nodemailer');\n\nconst emailData = $input.first().json;\n\n// Créer un transporteur avec les credentials du client\nconst transporter = nodemailer.createTransport({\n  host: emailData.smtpHost,\n  port: emailData.smtpPort,\n  secure: emailData.smtpPort === 465,\n  auth: {\n    user: emailData.smtpUser,\n    pass: emailData.smtpPassword\n  }\n});\n\n// Envoyer l'email\ntry {\n  const info = await transporter.sendMail({\n    from: `\"${emailData.fromName}\" <${emailData.fromEmail}>`,\n    to: emailData.to,\n    subject: emailData.subject,\n    text: emailData.body\n  });\n  \n  return {\n    success: true,\n    messageId: info.messageId,\n    to: emailData.to,\n    subject: emailData.subject\n  };\n} catch (error) {\n  return {\n    success: false,\n    error: error.message,\n    to: emailData.to\n  };\n}"
+      },
+      "id": "send-email-code",
+      "name": "📧 ENVOYER avec Nodemailer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "notes": "Utilise les credentials SMTP du client pour envoyer l'email"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "wait-delay",
+      "name": "Attendre 2 sec",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "webhookId": "delay-webhook"
+    }
+  ],
+  "connections": {
+    "Webhook - Réception": {
+      "main": [
+        [
+          {
+            "node": "Parser les données",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser les données": {
+      "main": [
+        [
+          {
+            "node": "Récupérer les clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Récupérer les clients": {
+      "main": [
+        [
+          {
+            "node": "Préparer les emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les emails": {
+      "main": [
+        [
+          {
+            "node": "Diviser en lots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diviser en lots": {
+      "main": [
+        [
+          {
+            "node": "📧 ENVOYER avec Nodemailer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 ENVOYER avec Nodemailer": {
+      "main": [
+        [
+          {
+            "node": "Attendre 2 sec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre 2 sec": {
+      "main": [
+        [
+          {
+            "node": "Diviser en lots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-17T00:00:00.000Z",
+  "versionId": "2"
+}

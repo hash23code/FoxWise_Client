@@ -1,0 +1,293 @@
+{
+  "name": "FoxWise - Campagnes (Multi-tenant)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign-mt",
+        "responseMode": "onReceived",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-campaign",
+      "name": "Webhook - Campagne",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "foxwise-campaign-mt"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extraire les données de la campagne\nconst body = $json.body;\n\nreturn {\n  campaignId: body.campaignId,\n  clientIds: body.clientIds,\n  subject: body.subject,\n  emailBody: body.body,\n  companyId: body.companyId,\n  \n  // Credentials SMTP du client\n  smtpHost: body.smtpHost,\n  smtpPort: body.smtpPort,\n  smtpUser: body.smtpUser,\n  smtpPassword: body.smtpPassword,\n  fromEmail: body.fromEmail,\n  fromName: body.fromName,\n  \n  // Supabase\n  supabaseUrl: body.supabaseUrl,\n  supabaseKey: body.supabaseKey,\n  \n  sendToAll: body.clientIds === 'all'\n};"
+      },
+      "id": "parse-campaign",
+      "name": "Parser la campagne",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.sendToAll}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-all-clients",
+      "name": "Tous les clients?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$node['Parser la campagne'].json.supabaseUrl}}/rest/v1/fc_clients?company_id=eq.{{$node['Parser la campagne'].json.companyId}}&select=*",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$node['Parser la campagne'].json.supabaseKey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{$node['Parser la campagne'].json.supabaseKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-all-clients",
+      "name": "Tous les clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$node['Parser la campagne'].json.supabaseUrl}}/rest/v1/rpc/get_clients_by_ids",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$node['Parser la campagne'].json.supabaseKey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{$node['Parser la campagne'].json.supabaseKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_ids",
+              "value": "={{$node['Parser la campagne'].json.clientIds}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-specific-clients",
+      "name": "Clients spécifiques",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {},
+      "id": "merge-clients",
+      "name": "Fusionner",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Personnaliser l'email pour chaque client\nconst clients = $input.all();\nconst campaignData = $node['Parser la campagne'].json;\n\nconst emails = [];\n\nfor (const item of clients) {\n  const client = item.json;\n  \n  // Remplacer les variables dans le sujet et le corps\n  let personalizedSubject = campaignData.subject\n    .replace(/\\{\\{client\\.name\\}\\}/g, client.name || 'Client')\n    .replace(/\\{\\{client\\.email\\}\\}/g, client.email || '');\n  \n  let personalizedBody = campaignData.emailBody\n    .replace(/\\{\\{client\\.name\\}\\}/g, client.name || 'Client')\n    .replace(/\\{\\{client\\.email\\}\\}/g, client.email || '')\n    .replace(/\\{\\{client\\.phone\\}\\}/g, client.phone || '')\n    .replace(/\\{\\{client\\.company\\}\\}/g, client.company || '');\n  \n  emails.push({\n    to: client.email,\n    subject: personalizedSubject,\n    body: personalizedBody,\n    clientId: client.id,\n    clientName: client.name,\n    campaignId: campaignData.campaignId,\n    \n    // Credentials SMTP\n    smtpHost: campaignData.smtpHost,\n    smtpPort: campaignData.smtpPort,\n    smtpUser: campaignData.smtpUser,\n    smtpPassword: campaignData.smtpPassword,\n    fromEmail: campaignData.fromEmail || campaignData.smtpUser,\n    fromName: campaignData.fromName\n  });\n}\n\nreturn emails;"
+      },
+      "id": "personalize-emails",
+      "name": "Personnaliser",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "split-batch-campaign",
+      "name": "Diviser en lots",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// UTILISE NODEMAILER AVEC CREDENTIALS DYNAMIQUES\nconst nodemailer = require('nodemailer');\n\nconst emailData = $input.first().json;\n\n// Créer un transporteur avec les credentials du client\nconst transporter = nodemailer.createTransport({\n  host: emailData.smtpHost,\n  port: emailData.smtpPort,\n  secure: emailData.smtpPort === 465,\n  auth: {\n    user: emailData.smtpUser,\n    pass: emailData.smtpPassword\n  }\n});\n\n// Envoyer l'email HTML\ntry {\n  const info = await transporter.sendMail({\n    from: `\"${emailData.fromName}\" <${emailData.fromEmail}>`,\n    to: emailData.to,\n    subject: emailData.subject,\n    text: emailData.body,\n    html: emailData.body // Supporter HTML\n  });\n  \n  return {\n    success: true,\n    messageId: info.messageId,\n    to: emailData.to,\n    clientId: emailData.clientId,\n    campaignId: emailData.campaignId\n  };\n} catch (error) {\n  return {\n    success: false,\n    error: error.message,\n    to: emailData.to,\n    clientId: emailData.clientId\n  };\n}"
+      },
+      "id": "send-campaign-email",
+      "name": "📧 ENVOYER CAMPAGNE",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait-campaign",
+      "name": "Attendre 3 sec",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1850, 300],
+      "webhookId": "campaign-delay"
+    }
+  ],
+  "connections": {
+    "Webhook - Campagne": {
+      "main": [
+        [
+          {
+            "node": "Parser la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser la campagne": {
+      "main": [
+        [
+          {
+            "node": "Tous les clients?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tous les clients?": {
+      "main": [
+        [
+          {
+            "node": "Tous les clients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clients spécifiques",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tous les clients": {
+      "main": [
+        [
+          {
+            "node": "Fusionner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clients spécifiques": {
+      "main": [
+        [
+          {
+            "node": "Fusionner",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fusionner": {
+      "main": [
+        [
+          {
+            "node": "Personnaliser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Personnaliser": {
+      "main": [
+        [
+          {
+            "node": "Diviser en lots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diviser en lots": {
+      "main": [
+        [
+          {
+            "node": "📧 ENVOYER CAMPAGNE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 ENVOYER CAMPAGNE": {
+      "main": [
+        [
+          {
+            "node": "Attendre 3 sec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre 3 sec": {
+      "main": [
+        [
+          {
+            "node": "Diviser en lots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-17T00:00:00.000Z",
+  "versionId": "2"
+}

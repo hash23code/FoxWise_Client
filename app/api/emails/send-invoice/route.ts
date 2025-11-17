@@ -2,10 +2,16 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getCompanyContext } from '@/lib/company-context'
+import { createClient } from '@supabase/supabase-js'
 
 // This endpoint queues invoice/reminder emails to be sent via n8n workflow
-// n8n workflow will handle the actual email sending
+// n8n workflow will handle the actual email sending with company's SMTP credentials
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL_INVOICE
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(request: Request) {
   try {
@@ -36,7 +42,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Type must be "invoice" or "reminder"' }, { status: 400 })
     }
 
-    // If n8n webhook URL is configured, forward the request
+    // Récupérer les credentials SMTP de l'entreprise
+    const { data: emailCreds, error: credsError } = await supabase.rpc('fc_get_email_credential', {
+      p_company_id: context.companyId
+    })
+
+    if (credsError || !emailCreds || emailCreds.length === 0) {
+      return NextResponse.json({
+        error: 'Email not configured',
+        message: 'Veuillez configurer votre email dans les paramètres avant d\'envoyer des emails.',
+        configUrl: '/settings'
+      }, { status: 400 })
+    }
+
+    const smtpConfig = emailCreds[0]
+
+    // If n8n webhook URL is configured, forward the request with SMTP credentials
     if (N8N_WEBHOOK_URL) {
       try {
         const response = await fetch(N8N_WEBHOOK_URL, {
@@ -51,7 +72,19 @@ export async function POST(request: Request) {
             customMessage,
             companyId: context.companyId,
             triggeredBy: userId,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+
+            // SMTP Credentials du client
+            smtpHost: smtpConfig.smtp_host,
+            smtpPort: smtpConfig.smtp_port,
+            smtpUser: smtpConfig.smtp_user,
+            smtpPassword: smtpConfig.smtp_password, // Déchiffré par la fonction RPC
+            fromEmail: smtpConfig.from_email,
+            fromName: smtpConfig.from_name,
+
+            // Supabase config pour que n8n puisse récupérer les clients
+            supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+            supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
           })
         })
 
