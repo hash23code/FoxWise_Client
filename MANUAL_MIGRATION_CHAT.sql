@@ -2,11 +2,11 @@
 -- MANUAL MIGRATION: Chat System Tables
 -- ============================================================================
 -- Run this in Supabase SQL Editor to create the chat system tables
--- This script is safe to run multiple times (uses IF NOT EXISTS)
+-- This script is safe to run multiple times
 -- ============================================================================
 
 -- ============================================================================
--- CHAT SYSTEM TABLES
+-- STEP 1: CREATE TABLES (ONLY IF THEY DON'T EXIST)
 -- ============================================================================
 
 -- Chat rooms (for group conversations)
@@ -20,8 +20,6 @@ CREATE TABLE IF NOT EXISTS fc_chat_rooms (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_fc_chat_rooms_company_id ON fc_chat_rooms(company_id);
-
 -- Chat room members
 CREATE TABLE IF NOT EXISTS fc_chat_room_members (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -31,9 +29,6 @@ CREATE TABLE IF NOT EXISTS fc_chat_room_members (
   last_read_at TIMESTAMP WITH TIME ZONE,
   UNIQUE(room_id, user_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_fc_chat_room_members_room_id ON fc_chat_room_members(room_id);
-CREATE INDEX IF NOT EXISTS idx_fc_chat_room_members_user_id ON fc_chat_room_members(user_id);
 
 -- Chat messages
 CREATE TABLE IF NOT EXISTS fc_chat_messages (
@@ -49,10 +44,6 @@ CREATE TABLE IF NOT EXISTS fc_chat_messages (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_fc_chat_messages_room_id ON fc_chat_messages(room_id);
-CREATE INDEX IF NOT EXISTS idx_fc_chat_messages_sender_id ON fc_chat_messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_fc_chat_messages_created_at ON fc_chat_messages(created_at DESC);
-
 -- Message read status
 CREATE TABLE IF NOT EXISTS fc_chat_message_reads (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -62,20 +53,35 @@ CREATE TABLE IF NOT EXISTS fc_chat_message_reads (
   UNIQUE(message_id, user_id)
 );
 
+-- ============================================================================
+-- STEP 2: CREATE INDEXES (ONLY IF THEY DON'T EXIST)
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_fc_chat_rooms_company_id ON fc_chat_rooms(company_id);
+
+CREATE INDEX IF NOT EXISTS idx_fc_chat_room_members_room_id ON fc_chat_room_members(room_id);
+CREATE INDEX IF NOT EXISTS idx_fc_chat_room_members_user_id ON fc_chat_room_members(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_fc_chat_messages_room_id ON fc_chat_messages(room_id);
+CREATE INDEX IF NOT EXISTS idx_fc_chat_messages_sender_id ON fc_chat_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_fc_chat_messages_created_at ON fc_chat_messages(created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_fc_chat_message_reads_message_id ON fc_chat_message_reads(message_id);
 CREATE INDEX IF NOT EXISTS idx_fc_chat_message_reads_user_id ON fc_chat_message_reads(user_id);
 
 -- ============================================================================
--- ROW LEVEL SECURITY POLICIES
+-- STEP 3: ENABLE ROW LEVEL SECURITY
 -- ============================================================================
 
--- Enable RLS on chat tables
 ALTER TABLE fc_chat_rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_chat_room_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_chat_message_reads ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies if they exist (to allow re-running this script)
+-- ============================================================================
+-- STEP 4: DROP EXISTING POLICIES (IF ANY)
+-- ============================================================================
+
 DROP POLICY IF EXISTS "Users can view rooms in their company" ON fc_chat_rooms;
 DROP POLICY IF EXISTS "Users can create rooms in their company" ON fc_chat_rooms;
 DROP POLICY IF EXISTS "Users can view their room memberships" ON fc_chat_room_members;
@@ -84,6 +90,10 @@ DROP POLICY IF EXISTS "Users can view messages in their rooms" ON fc_chat_messag
 DROP POLICY IF EXISTS "Users can send messages to their rooms" ON fc_chat_messages;
 DROP POLICY IF EXISTS "Users can mark messages as read" ON fc_chat_message_reads;
 DROP POLICY IF EXISTS "Users can view read status in their rooms" ON fc_chat_message_reads;
+
+-- ============================================================================
+-- STEP 5: CREATE RLS POLICIES
+-- ============================================================================
 
 -- Chat Rooms: Users can view rooms in their company
 CREATE POLICY "Users can view rooms in their company" ON fc_chat_rooms
@@ -109,8 +119,8 @@ CREATE POLICY "Users can create rooms in their company" ON fc_chat_rooms
 CREATE POLICY "Users can view their room memberships" ON fc_chat_room_members
   FOR SELECT
   USING (
-    room_id IN (
-      SELECT id FROM fc_chat_rooms WHERE company_id IN (
+    fc_chat_room_members.room_id IN (
+      SELECT fc_chat_rooms.id FROM fc_chat_rooms WHERE fc_chat_rooms.company_id IN (
         SELECT company_id FROM fc_employees
         WHERE clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
       )
@@ -121,8 +131,8 @@ CREATE POLICY "Users can view their room memberships" ON fc_chat_room_members
 CREATE POLICY "Users can join rooms in their company" ON fc_chat_room_members
   FOR INSERT
   WITH CHECK (
-    room_id IN (
-      SELECT id FROM fc_chat_rooms WHERE company_id IN (
+    fc_chat_room_members.room_id IN (
+      SELECT fc_chat_rooms.id FROM fc_chat_rooms WHERE fc_chat_rooms.company_id IN (
         SELECT company_id FROM fc_employees
         WHERE clerk_user_id = current_setting('request.jwt.claims', true)::json->>'sub'
       )
@@ -133,9 +143,9 @@ CREATE POLICY "Users can join rooms in their company" ON fc_chat_room_members
 CREATE POLICY "Users can view messages in their rooms" ON fc_chat_messages
   FOR SELECT
   USING (
-    room_id IN (
-      SELECT room_id FROM fc_chat_room_members
-      WHERE user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    fc_chat_messages.room_id IN (
+      SELECT fc_chat_room_members.room_id FROM fc_chat_room_members
+      WHERE fc_chat_room_members.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
     )
   );
 
@@ -143,9 +153,9 @@ CREATE POLICY "Users can view messages in their rooms" ON fc_chat_messages
 CREATE POLICY "Users can send messages to their rooms" ON fc_chat_messages
   FOR INSERT
   WITH CHECK (
-    room_id IN (
-      SELECT room_id FROM fc_chat_room_members
-      WHERE user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    fc_chat_messages.room_id IN (
+      SELECT fc_chat_room_members.room_id FROM fc_chat_room_members
+      WHERE fc_chat_room_members.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
     )
   );
 
@@ -153,56 +163,71 @@ CREATE POLICY "Users can send messages to their rooms" ON fc_chat_messages
 CREATE POLICY "Users can mark messages as read" ON fc_chat_message_reads
   FOR INSERT
   WITH CHECK (
-    user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    fc_chat_message_reads.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
   );
 
 -- Chat Message Reads: Users can view read status
 CREATE POLICY "Users can view read status in their rooms" ON fc_chat_message_reads
   FOR SELECT
   USING (
-    message_id IN (
-      SELECT id FROM fc_chat_messages WHERE room_id IN (
-        SELECT room_id FROM fc_chat_room_members
-        WHERE user_id = current_setting('request.jwt.claims', true)::json->>'sub'
+    fc_chat_message_reads.message_id IN (
+      SELECT fc_chat_messages.id FROM fc_chat_messages WHERE fc_chat_messages.room_id IN (
+        SELECT fc_chat_room_members.room_id FROM fc_chat_room_members
+        WHERE fc_chat_room_members.user_id = current_setting('request.jwt.claims', true)::json->>'sub'
       )
     )
   );
 
 -- ============================================================================
--- CREATE DEFAULT COMPANY CHAT ROOM
+-- STEP 6: CREATE DEFAULT COMPANY CHAT ROOM
 -- ============================================================================
 
 -- Create a company-wide chat room for each company (if it doesn't exist)
--- This will only insert rooms for companies that don't have one yet
-INSERT INTO fc_chat_rooms (company_id, name, type, created_by)
-SELECT
-  c.id,
-  'Équipe ' || c.company_name || ' 🦊',
-  'company',
-  e.clerk_user_id
-FROM fc_companies c
-JOIN fc_employees e ON e.company_id = c.id AND e.role IN ('owner', 'manager')
-WHERE NOT EXISTS (
-  SELECT 1 FROM fc_chat_rooms
-  WHERE company_id = c.id AND type = 'company'
-)
-GROUP BY c.id, c.company_name, e.clerk_user_id;
+DO $$
+BEGIN
+  INSERT INTO fc_chat_rooms (company_id, name, type, created_by)
+  SELECT
+    c.id,
+    'Équipe ' || c.company_name || ' 🦊',
+    'company',
+    (SELECT e.clerk_user_id FROM fc_employees e
+     WHERE e.company_id = c.id AND e.role IN ('owner', 'manager')
+     LIMIT 1)
+  FROM fc_companies c
+  WHERE NOT EXISTS (
+    SELECT 1 FROM fc_chat_rooms
+    WHERE company_id = c.id AND type = 'company'
+  )
+  AND EXISTS (
+    SELECT 1 FROM fc_employees e
+    WHERE e.company_id = c.id AND e.role IN ('owner', 'manager')
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Could not create default chat rooms: %', SQLERRM;
+END $$;
 
 -- Add all employees to their company chat room
-INSERT INTO fc_chat_room_members (room_id, user_id)
-SELECT DISTINCT
-  r.id,
-  e.clerk_user_id
-FROM fc_chat_rooms r
-JOIN fc_employees e ON e.company_id = r.company_id
-WHERE r.type = 'company'
-  AND NOT EXISTS (
-    SELECT 1 FROM fc_chat_room_members
-    WHERE room_id = r.id AND user_id = e.clerk_user_id
-  );
+DO $$
+BEGIN
+  INSERT INTO fc_chat_room_members (room_id, user_id)
+  SELECT DISTINCT
+    r.id,
+    e.clerk_user_id
+  FROM fc_chat_rooms r
+  JOIN fc_employees e ON e.company_id = r.company_id
+  WHERE r.type = 'company'
+    AND NOT EXISTS (
+      SELECT 1 FROM fc_chat_room_members
+      WHERE room_id = r.id AND user_id = e.clerk_user_id
+    );
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Could not add employees to chat rooms: %', SQLERRM;
+END $$;
 
 -- ============================================================================
--- DONE!
+-- DONE! SHOW RESULTS
 -- ============================================================================
 
 SELECT
