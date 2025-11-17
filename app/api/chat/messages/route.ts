@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { supabase } from '@/lib/supabase'
 import { getCompanyContext } from '@/lib/company-context'
 
@@ -57,10 +57,25 @@ export async function GET(request: NextRequest) {
           .eq('clerk_user_id', msg.sender_id)
           .single()
 
+        let senderName = sender?.full_name || sender?.email
+        let senderColor = sender?.color
+
+        // If no name found, generate a fallback
+        if (!senderName) {
+          senderName = 'User'
+        }
+
+        // Generate a color if none exists
+        if (!senderColor) {
+          const colors = ['#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#06B6D4']
+          const colorIndex = parseInt(msg.sender_id.slice(-4), 16) % colors.length
+          senderColor = colors[colorIndex]
+        }
+
         return {
           ...msg,
-          sender_name: sender?.full_name || sender?.email || 'Unknown',
-          sender_color: sender?.color
+          sender_name: senderName,
+          sender_color: senderColor
         }
       })
     )
@@ -120,17 +135,37 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    // Get sender information
+    // Get sender information from fc_users first
     const { data: sender } = await supabase
       .from('fc_users')
       .select('full_name, email, color')
       .eq('clerk_user_id', userId)
       .single()
 
+    // If no name in fc_users, get it from Clerk
+    let senderName = sender?.full_name || sender?.email
+    let senderColor = sender?.color
+
+    if (!senderName || senderName === 'Unknown') {
+      const clerkUser = await currentUser()
+      if (clerkUser) {
+        senderName = clerkUser.firstName && clerkUser.lastName
+          ? `${clerkUser.firstName} ${clerkUser.lastName}`
+          : clerkUser.firstName || clerkUser.emailAddresses?.[0]?.emailAddress || 'Unknown'
+
+        // Generate a color based on user ID if none exists
+        if (!senderColor) {
+          const colors = ['#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#06B6D4']
+          const colorIndex = parseInt(userId.slice(-4), 16) % colors.length
+          senderColor = colors[colorIndex]
+        }
+      }
+    }
+
     const enrichedMessage = {
       ...message,
-      sender_name: sender?.full_name || sender?.email || 'Unknown',
-      sender_color: sender?.color
+      sender_name: senderName || 'Unknown',
+      sender_color: senderColor
     }
 
     return NextResponse.json(enrichedMessage, { status: 201 })
