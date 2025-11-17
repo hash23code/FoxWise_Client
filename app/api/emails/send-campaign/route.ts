@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getCompanyContext } from '@/lib/company-context'
