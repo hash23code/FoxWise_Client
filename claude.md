@@ -61,6 +61,20 @@ FoxWise est une plateforme complète de gestion d'équipe en temps réel compren
 - Factures et paiements
 - Rapports financiers
 
+### 📧 Système d'Email Intelligent
+- **Authentification moderne avec Google OAuth 2.0**
+- **Envoi de factures par email** aux clients
+- **Campagnes email personnalisées** (rappels, promotions, etc.)
+- **Architecture dual-path**:
+  - OAuth → Gmail API Direct (moderne, plug-and-play)
+  - SMTP → n8n Workflow (fallback pour Outlook, custom SMTP)
+- **Credentials chiffrés AES-256** dans Supabase
+- **Configuration plug-and-play** pour clients non-techniques
+- **Personnalisation automatique** avec variables {{client.name}}
+- **Support HTML et texte brut**
+- **Envoi batch** avec gestion automatique des erreurs
+- **Refresh tokens** automatique (pas de réauthentification)
+
 ## Stack Technique
 
 ### Frontend
@@ -78,6 +92,11 @@ FoxWise est une plateforme complète de gestion d'équipe en temps réel compren
 - **Authentication**: Clerk
 - **ORM**: Supabase Client
 - **Security**: Row Level Security (RLS)
+- **Email**:
+  - Gmail API (googleapis)
+  - n8n workflows (automation)
+  - Nodemailer (SMTP fallback)
+- **Encryption**: PostgreSQL pgcrypto (AES-256)
 
 ### Déploiement
 - **Hosting**: Vercel
@@ -96,26 +115,42 @@ FoxWise_Client/
 │   │   ├── activities/       # Gestion activités
 │   │   ├── sectors/          # Gestion secteurs
 │   │   ├── employees/        # Gestion employés (invitations)
-│   │   └── settings/         # Paramètres compagnie
+│   │   └── settings/         # Paramètres compagnie + Email config
 │   ├── api/                  # API Routes
 │   │   ├── activities/       # CRUD activités
 │   │   ├── clients/          # CRUD clients
 │   │   ├── jobs/             # CRUD jobs
 │   │   ├── sectors/          # CRUD secteurs
 │   │   ├── employees/        # Gestion employés
-│   │   └── invitations/      # Système d'invitation
+│   │   ├── invitations/      # Système d'invitation
+│   │   ├── auth/google/      # OAuth 2.0 Google flow
+│   │   │   ├── authorize/    # Initie OAuth
+│   │   │   └── callback/     # Callback OAuth
+│   │   └── emails/           # Envoi d'emails
+│   │       ├── send-invoice/ # Factures et rappels
+│   │       └── send-campaign/# Campagnes marketing
 │   ├── sign-in/              # Page connexion Clerk
 │   ├── sign-up/              # Page inscription Clerk
 │   └── page.tsx              # Landing page
 ├── lib/
 │   ├── supabase.ts           # Client Supabase
 │   ├── company-context.ts    # Contexte multi-tenant
+│   ├── gmail-api.ts          # 📧 Gmail API helpers (OAuth)
 │   └── utils.ts              # Utilitaires
+├── database/
+│   └── email_credentials.sql # 📧 Table + fonctions chiffrement
+├── n8n-workflows/            # 📧 Workflows n8n (SMTP)
+│   ├── GUIDE-SIMPLE.md
+│   ├── GUIDE-MULTITENANT.md
+│   ├── invoice-workflow.json
+│   └── campaign-workflow.json
 ├── components/               # Composants réutilisables
 ├── types/                    # Définitions TypeScript
 ├── supabase/
 │   ├── migrations/           # Migrations SQL
 │   └── AUTO_MIGRATE.sql      # Script migration automatique
+├── GUIDE-GOOGLE-OAUTH-SETUP.md # 📧 Guide config Google OAuth
+├── N8N_INTEGRATION_GUIDE.md    # 📧 Guide n8n
 └── public/                   # Assets statiques
 ```
 
@@ -186,6 +221,36 @@ FoxWise_Client/
 - `expires_at` (TIMESTAMP)
 - Métadonnées: created_at, updated_at
 
+#### fc_email_credentials
+- `id` (UUID, PK)
+- `company_id` (UUID, FK → fc_companies, UNIQUE)
+- `provider` (VARCHAR) - 'gmail', 'gmail_oauth', 'outlook', 'smtp_custom'
+- `auth_method` (VARCHAR) - 'smtp' ou 'oauth'
+- **SMTP Fields** (pour auth_method='smtp'):
+  - `smtp_host` (VARCHAR) - ex: smtp.gmail.com
+  - `smtp_port` (INTEGER) - ex: 587
+  - `smtp_secure` (BOOLEAN) - TLS/SSL
+  - `smtp_user` (VARCHAR) - Email address
+  - `smtp_password_encrypted` (TEXT) - Mot de passe chiffré AES-256
+- **OAuth Fields** (pour auth_method='oauth'):
+  - `oauth_refresh_token_encrypted` (TEXT) - Refresh token chiffré
+  - `oauth_access_token_encrypted` (TEXT) - Access token chiffré
+  - `oauth_token_expiry` (TIMESTAMPTZ) - Expiration de l'access token
+  - `oauth_scope` (TEXT) - Scopes OAuth accordés
+- **Email Settings**:
+  - `from_email` (VARCHAR) - Email "From"
+  - `from_name` (VARCHAR) - Nom affiché
+- **Status**:
+  - `is_verified` (BOOLEAN) - Configuration testée et validée
+  - `is_active` (BOOLEAN)
+  - `last_tested_at` (TIMESTAMPTZ)
+  - `test_status`, `test_error`
+- Métadonnées: created_at, updated_at
+
+#### fc_email_provider_presets
+- Presets pour Gmail, Outlook, Office365, Yahoo
+- Configuration SMTP pré-remplie pour faciliter la configuration
+
 ### Sécurité (RLS)
 
 Toutes les tables ont des policies RLS qui assurent:
@@ -209,6 +274,178 @@ Toutes les tables ont des policies RLS qui assurent:
 4. S'inscrit via Clerk avec le token d'invitation
 5. Automatiquement assigné à la company du manager
 6. Rôle: employee avec permissions limitées
+
+## Architecture Email Multi-Tenant
+
+### Vue d'Ensemble
+
+FoxWise offre un système d'email intelligent avec **deux méthodes d'authentification** selon les besoins:
+
+1. **OAuth 2.0 avec Google** (Recommandé ✨)
+   - Configuration en 1 clic "Connecter avec Google"
+   - Pas de mots de passe à gérer
+   - Envoi direct via Gmail API (pas de n8n nécessaire)
+   - Expérience moderne type Slack/Notion
+   - Refresh automatique des tokens
+   - Sécurité maximale
+
+2. **SMTP Custom** (Fallback pour Outlook, etc.)
+   - Configuration manuelle SMTP
+   - Support de tous les providers email
+   - Utilise n8n workflows pour l'envoi
+   - Mots de passe chiffrés AES-256 dans Supabase
+   - Idéal pour emails professionnels non-Gmail
+
+### Architecture Dual-Path
+
+```
+┌─────────────────────────────────────┐
+│ Client demande envoi email          │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│ FoxWise vérifie auth_method         │
+│ dans fc_email_credentials           │
+└─────────────────────────────────────┘
+              ↓
+      ┌───────┴───────┐
+      ↓               ↓
+┌──────────┐    ┌──────────┐
+│ OAuth    │    │ SMTP     │
+└──────────┘    └──────────┘
+      ↓               ↓
+┌──────────────────┐ ┌──────────────────┐
+│ Gmail API Direct │ │ n8n Workflow     │
+│ lib/gmail-api.ts │ │ + Nodemailer     │
+└──────────────────┘ └──────────────────┘
+      ↓               ↓
+   Email envoyé!   Email envoyé!
+```
+
+### Fonctions SQL de Sécurité
+
+**Pour OAuth credentials:**
+```sql
+-- Sauvegarde (chiffre automatiquement)
+fc_save_oauth_credential(company_id, provider, email, tokens...)
+
+-- Récupération (déchiffre automatiquement)
+fc_get_oauth_credential(company_id)
+```
+
+**Pour SMTP credentials:**
+```sql
+-- Sauvegarde (chiffre automatiquement)
+fc_save_email_credential(company_id, smtp_host, port, password...)
+
+-- Récupération (déchiffre automatiquement)
+fc_get_email_credential(company_id)
+```
+
+### Routes API Email
+
+**`/api/auth/google/authorize`**
+- Initie le flow OAuth 2.0 avec Google
+- Génère l'URL d'autorisation
+- Scopes: gmail.send, userinfo.email, userinfo.profile
+
+**`/api/auth/google/callback`**
+- Reçoit le callback OAuth de Google
+- Échange le code pour des tokens (refresh + access)
+- Chiffre et sauvegarde les tokens dans Supabase
+- Redirige vers /settings avec succès
+
+**`/api/emails/send-invoice`**
+- Envoie factures ou rappels
+- Détecte automatiquement auth_method
+- Personnalise avec nom du client
+- Support batch (multiple clients)
+
+**`/api/emails/send-campaign`**
+- Envoie campagnes marketing/rappels
+- Support clientIds 'all' ou liste spécifique
+- Variables de personnalisation: {{client.name}}, {{client.email}}
+- Détection automatique HTML vs texte brut
+
+### Configuration Client (Settings Page)
+
+**Pour OAuth (Recommandé):**
+1. Clic sur "Connecter avec Google"
+2. Authentification Google OAuth
+3. Autorisation des scopes
+4. Tokens sauvegardés automatiquement
+5. Prêt à envoyer! ✅
+
+**Pour SMTP:**
+1. Sélection du provider (Gmail, Outlook, custom)
+2. Presets automatiques pour providers populaires
+3. Saisie du mot de passe d'application
+4. Test de connexion
+5. Sauvegarde chiffrée
+
+### Sécurité Email
+
+- ✅ **Chiffrement AES-256** de tous les credentials
+- ✅ **Isolation multi-tenant** stricte (company_id)
+- ✅ **Clé de chiffrement** en variable d'environnement
+- ✅ **PostgreSQL pgcrypto** pour chiffrement/déchiffrement
+- ✅ **RLS policies** pour accès contrôlé
+- ✅ **Refresh tokens** stockés chiffrés (OAuth)
+- ✅ **Access tokens** auto-refresh (pas de réauth)
+
+### Envoi d'Emails
+
+**Via Gmail API (OAuth):**
+```typescript
+// lib/gmail-api.ts
+sendViaGmailAPI(companyId, oauthCreds, emailData)
+sendBatchViaGmailAPI(companyId, oauthCreds, emails[])
+```
+
+**Via n8n (SMTP):**
+```typescript
+// Webhook POST vers n8n avec credentials
+{
+  smtpHost, smtpPort, smtpUser, smtpPassword,
+  recipients, subject, body
+}
+```
+
+### n8n Workflows
+
+**Invoice Workflow:**
+- Reçoit webhook de FoxWise
+- Configure SMTP avec credentials du client
+- Envoie emails via Nodemailer
+- Gère les erreurs et retry
+
+**Campaign Workflow:**
+- Même principe que Invoice
+- Support envoi batch
+- Délai entre emails (anti-spam)
+- Tracking des ouvertures (optionnel)
+
+### Variables de Personnalisation
+
+Les emails supportent les variables suivantes:
+- `{{client.name}}` - Nom du client
+- `{{client.email}}` - Email du client
+- `{{company.name}}` - Nom de l'entreprise (futur)
+- `{{manager.name}}` - Nom du gestionnaire (futur)
+
+### Gestion des Erreurs
+
+**Gmail API:**
+- Auto-refresh des access tokens expirés
+- Retry automatique sur erreurs temporaires
+- Messages d'erreur en français
+- Rapport détaillé (succès/échecs)
+
+**n8n SMTP:**
+- Retry configurable dans n8n
+- Queue pour emails en attente
+- Logs détaillés dans n8n
+- Notifications d'échec
 
 ## Fonctionnalités Clés par Application
 
@@ -250,9 +487,16 @@ Toutes les tables ont des policies RLS qui assurent:
 
 **Paramètres**
 - Gestion de la compagnie
+- **Configuration Email** (OAuth Google ou SMTP)
 - Activités et tarifs
 - Secteurs géographiques
 - Préférences utilisateur
+
+**Envoi d'Emails**
+- Factures aux clients
+- Rappels de paiement
+- Campagnes marketing personnalisées
+- Support variables {{client.name}}
 
 ### FoxWise Worker (Employés)
 
@@ -307,6 +551,7 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
 # Mapbox
 NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=
@@ -314,6 +559,21 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=
 # App URLs
 NEXT_PUBLIC_APP_URL=https://fox-wise-client.vercel.app
 NEXT_PUBLIC_WORKER_APP_URL=[URL FoxWise Worker]
+
+# Google OAuth (pour email Gmail)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+# Voir GUIDE-GOOGLE-OAUTH-SETUP.md pour configuration
+
+# n8n Integration (optionnel, pour SMTP)
+N8N_WEBHOOK_URL_INVOICE=https://votre-n8n.com/webhook/invoice
+N8N_WEBHOOK_URL_CAMPAIGN=https://votre-n8n.com/webhook/campaign
+N8N_API_KEY=votre-cle-api-secrete
+# Note: OAuth users n'ont PAS besoin de n8n!
+
+# Email Encryption
+# IMPORTANT: Générer avec: openssl rand -base64 32
+EMAIL_ENCRYPTION_KEY=votre-cle-de-chiffrement-tres-secrete
 ```
 
 ## Installation et Développement
@@ -361,6 +621,117 @@ npm run dev
 npm run build
 npm start
 ```
+
+## Configuration Email
+
+### Option 1: Google OAuth (Recommandé) ⚡
+
+**Étape 1: Créer OAuth Client ID dans Google Cloud Console**
+
+Suivre le guide détaillé: `GUIDE-GOOGLE-OAUTH-SETUP.md`
+
+1. Aller sur https://console.cloud.google.com
+2. Créer un projet (ou sélectionner existant)
+3. Activer Gmail API
+4. Créer OAuth Client ID (Web application)
+5. Ajouter redirect URI: `https://votre-domaine.com/api/auth/google/callback`
+6. Copier Client ID et Client Secret
+
+**Étape 2: Configurer Variables d'Environnement**
+
+```env
+GOOGLE_CLIENT_ID=123456789.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-abc123def456
+NEXT_PUBLIC_APP_URL=https://votre-domaine.com
+```
+
+**Étape 3: Exécuter SQL dans Supabase**
+
+```bash
+# Exécuter dans Supabase SQL Editor
+database/email_credentials.sql
+```
+
+**Étape 4: Connecter dans l'Application**
+
+1. Aller dans Settings
+2. Cliquer "Connecter avec Google"
+3. Autoriser l'accès Gmail
+4. Done! Prêt à envoyer 🎉
+
+**Avantages:**
+- ✅ Configuration en 1 clic pour le client
+- ✅ Pas de mots de passe à gérer
+- ✅ Tokens auto-refresh
+- ✅ Gmail API direct (rapide et fiable)
+- ✅ Pas besoin de n8n
+
+### Option 2: SMTP avec n8n (Pour Outlook, etc.)
+
+**Étape 1: Installer n8n**
+
+```bash
+# Docker (recommandé)
+docker run -it --rm \
+  --name n8n \
+  -p 5678:5678 \
+  -v ~/.n8n:/home/node/.n8n \
+  n8nio/n8n
+
+# Ou npm global
+npm install n8n -g
+n8n start
+```
+
+**Étape 2: Importer Workflows**
+
+1. Ouvrir n8n (http://localhost:5678)
+2. Aller dans Workflows
+3. Importer les fichiers JSON:
+   - `n8n-workflows/invoice-workflow.json`
+   - `n8n-workflows/campaign-workflow.json`
+
+**Étape 3: Configurer Webhooks**
+
+1. Dans n8n, copier les URLs webhook
+2. Ajouter dans .env:
+
+```env
+N8N_WEBHOOK_URL_INVOICE=https://n8n.votredomaine.com/webhook/invoice
+N8N_WEBHOOK_URL_CAMPAIGN=https://n8n.votredomaine.com/webhook/campaign
+N8N_API_KEY=votre-cle-api-generee
+```
+
+**Étape 4: Générer Clé de Chiffrement**
+
+```bash
+openssl rand -base64 32
+```
+
+Ajouter dans .env:
+```env
+EMAIL_ENCRYPTION_KEY=la-cle-generee-ici
+```
+
+**Étape 5: Exécuter SQL dans Supabase**
+
+```bash
+# Exécuter dans Supabase SQL Editor
+database/email_credentials.sql
+```
+
+**Étape 6: Configuration Client**
+
+1. Aller dans Settings
+2. Choisir provider (Gmail, Outlook, Custom)
+3. Entrer SMTP credentials
+4. Tester connexion
+5. Sauvegarder (chiffrement automatique)
+
+**Note:** Les guides détaillés sont disponibles dans:
+- `N8N_INTEGRATION_GUIDE.md` - Guide général
+- `n8n-workflows/GUIDE-SIMPLE.md` - Pour configuration simple
+- `n8n-workflows/GUIDE-MULTITENANT.md` - Pour multi-tenant complet
 
 ## Déploiement
 
@@ -446,12 +817,18 @@ Configurer dans le dashboard Vercel:
 
 ## Roadmap
 
-### Q1 2025
+### Q1 2025 ✅ COMPLÉTÉ
 - ✅ Multi-tenant architecture
-- ✅ Gestion d'employés
-- ✅ GPS Navigation 3D
+- ✅ Gestion d'employés avec invitations
+- ✅ GPS Navigation 3D immersive
 - ✅ Suivi automatique du temps
-- ✅ Rapports gestionnaires
+- ✅ Rapports gestionnaires détaillés
+- ✅ **Google OAuth 2.0 pour emails**
+- ✅ **Envoi de factures par email**
+- ✅ **Campagnes email personnalisées**
+- ✅ **Architecture dual-path (OAuth/SMTP)**
+- ✅ **Intégration n8n workflows**
+- ✅ **Encryption AES-256 des credentials**
 
 ### Q2 2025
 - 📱 Publication sur Google Play Store
@@ -459,19 +836,25 @@ Configurer dans le dashboard Vercel:
 - 🔔 Notifications push
 - 📊 Analytics avancés
 - 💬 Chat intégré équipe
+- 📧 Templates d'emails personnalisables
+- 📧 Tracking d'ouverture emails
 
 ### Q3 2025
 - 🤖 Intelligence artificielle pour optimisation itinéraires
 - 📸 Photos de jobs avec géolocalisation
 - ✍️ Signatures électroniques clients
-- 📄 Génération automatique de factures
+- 📄 Génération automatique de factures PDF
 - 🌐 Support multilingue
+- 📧 Intégration Outlook OAuth
+- 📧 Scheduling d'emails avancé
 
 ### Q4 2025
 - 🎯 Optimisation de zones de travail par IA
 - 📈 Prédictions de temps et coûts
 - 🔗 Intégrations tierces (QuickBooks, etc.)
 - 🌍 Expansion internationale
+- 📧 A/B testing pour campagnes email
+- 📧 Email analytics et rapports
 
 ## Contribution
 
