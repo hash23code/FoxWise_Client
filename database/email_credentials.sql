@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS fc_email_credentials (
 );
 
 -- Index pour performance
-CREATE INDEX idx_email_credentials_company ON fc_email_credentials(company_id);
-CREATE INDEX idx_email_credentials_active ON fc_email_credentials(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_email_credentials_company ON fc_email_credentials(company_id);
+CREATE INDEX IF NOT EXISTS idx_email_credentials_active ON fc_email_credentials(is_active) WHERE is_active = true;
 
 -- ================================================================
 -- Fonctions helper pour chiffrer/déchiffrer les mots de passe
@@ -306,6 +306,10 @@ ON CONFLICT (provider) DO NOTHING;
 -- Permissions RLS (Row Level Security)
 -- ================================================================
 ALTER TABLE fc_email_credentials ENABLE ROW LEVEL SECURITY;
+
+-- Drop policies if they exist (pour éviter les erreurs de duplication)
+DROP POLICY IF EXISTS "Users can view their company email credentials" ON fc_email_credentials;
+DROP POLICY IF EXISTS "Managers can modify their company email credentials" ON fc_email_credentials;
 
 -- Les utilisateurs ne peuvent voir que les credentials de leur company
 -- Note: Comme on utilise Clerk, on désactive temporairement les RLS strictes
