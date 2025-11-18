@@ -77,17 +77,32 @@ export default function SettingsPage() {
     smtp_password: '',
     from_email: '',
     from_name: '',
+    auth_method: 'smtp', // 'smtp' ou 'oauth'
   })
   const [emailConfigLoading, setEmailConfigLoading] = useState(false)
   const [emailConfigSaved, setEmailConfigSaved] = useState(false)
   const [emailTestStatus, setEmailTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
   const [emailTestError, setEmailTestError] = useState('')
   const [showEmailPassword, setShowEmailPassword] = useState(false)
+  const [oauthConnecting, setOauthConnecting] = useState(false)
 
   useEffect(() => {
     if (user) {
       loadSettings()
       loadEmailConfig()
+
+      // Vérifier si on revient d'un OAuth callback
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('oauth_success') === 'true') {
+        setEmailTestStatus('success')
+        // Nettoyer l'URL
+        window.history.replaceState({}, '', '/settings')
+      } else if (params.get('error')) {
+        const error = params.get('error')
+        setEmailTestStatus('error')
+        setEmailTestError(`OAuth error: ${error}`)
+        window.history.replaceState({}, '', '/settings')
+      }
     }
   }, [user])
 
@@ -145,6 +160,7 @@ export default function SettingsPage() {
             smtp_password: '', // Ne jamais charger le mot de passe pour la sécurité
             from_email: data.from_email || '',
             from_name: data.from_name || '',
+            auth_method: data.auth_method || 'smtp',
           })
           if (data.is_verified) {
             setEmailTestStatus('success')
@@ -216,6 +232,27 @@ export default function SettingsPage() {
         smtp_host: providerData.smtp_host,
         smtp_port: providerData.smtp_port,
       })
+    }
+  }
+
+  // Connecter avec Google OAuth
+  const handleConnectGoogle = async () => {
+    setOauthConnecting(true)
+    try {
+      const response = await fetch('/api/auth/google/authorize')
+      const data = await response.json()
+
+      if (data.authUrl) {
+        // Rediriger vers Google OAuth
+        window.location.href = data.authUrl
+      } else {
+        throw new Error('Failed to get authorization URL')
+      }
+    } catch (error) {
+      console.error('OAuth error:', error)
+      setEmailTestStatus('error')
+      setEmailTestError('Erreur lors de la connexion à Google')
+      setOauthConnecting(false)
     }
   }
 
@@ -389,6 +426,69 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-6">
+          {/* OAuth Google - Méthode recommandée */}
+          <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 border-2 border-blue-600/50 rounded-xl p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+                  <svg className="w-8 h-8" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                    <path fill="none" d="M0 0h48v48H0z"/>
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-lg font-bold text-white">Connecter avec Google</h3>
+                  <span className="px-2 py-1 text-xs font-semibold bg-blue-600 text-white rounded-full">RECOMMANDÉ</span>
+                </div>
+                <p className="text-sm text-gray-300 mb-4">
+                  Méthode moderne et sécurisée. Un clic et c&apos;est configuré! Aucun mot de passe à entrer.
+                </p>
+                <button
+                  onClick={handleConnectGoogle}
+                  disabled={oauthConnecting || emailTestStatus === 'success'}
+                  className="px-6 py-3 bg-white hover:bg-gray-100 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-semibold rounded-lg flex items-center gap-2 transition-all"
+                >
+                  {oauthConnecting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Connexion en cours...
+                    </>
+                  ) : emailTestStatus === 'success' && emailConfig.auth_method === 'oauth' ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                      Déjà connecté avec Google
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                      </svg>
+                      Connecter avec Google
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-700"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-gray-900 text-gray-400">ou configurez manuellement</span>
+            </div>
+          </div>
+
           {/* Provider Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">
