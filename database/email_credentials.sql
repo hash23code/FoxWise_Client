@@ -14,16 +14,25 @@ CREATE TABLE IF NOT EXISTS fc_email_credentials (
   company_id UUID NOT NULL REFERENCES fc_companies(id) ON DELETE CASCADE,
 
   -- Provider type (pour simplifier la config)
-  provider VARCHAR(50) NOT NULL DEFAULT 'smtp_custom', -- 'gmail', 'outlook', 'smtp_custom'
+  provider VARCHAR(50) NOT NULL DEFAULT 'smtp_custom', -- 'gmail', 'gmail_oauth', 'outlook', 'smtp_custom'
 
-  -- SMTP Configuration
+  -- Auth method: 'smtp' or 'oauth'
+  auth_method VARCHAR(20) DEFAULT 'smtp', -- 'smtp', 'oauth'
+
+  -- SMTP Configuration (for smtp auth_method)
   smtp_host VARCHAR(255), -- smtp.gmail.com, smtp-mail.outlook.com, etc.
   smtp_port INTEGER DEFAULT 587,
   smtp_secure BOOLEAN DEFAULT true, -- TLS/SSL
 
-  -- Authentication
-  smtp_user VARCHAR(255) NOT NULL, -- Email address
+  -- SMTP Authentication
+  smtp_user VARCHAR(255), -- Email address
   smtp_password_encrypted TEXT, -- Mot de passe chiffré avec pgcrypto
+
+  -- OAuth Configuration (for oauth auth_method)
+  oauth_refresh_token_encrypted TEXT, -- OAuth refresh token (chiffré)
+  oauth_access_token_encrypted TEXT, -- OAuth access token (chiffré, peut expirer)
+  oauth_token_expiry TIMESTAMPTZ, -- Quand l'access token expire
+  oauth_scope TEXT, -- OAuth scopes granted
 
   -- Email settings
   from_email VARCHAR(255) NOT NULL, -- Email "From"
@@ -165,6 +174,106 @@ BEGIN
   WHERE company_id = p_company_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ================================================================
+-- Fonction pour sauvegarder OAuth credentials (Google)
+-- ================================================================
+CREATE OR REPLACE FUNCTION fc_save_oauth_credential(
+  p_company_id UUID,
+  p_provider VARCHAR,
+  p_from_email VARCHAR,
+  p_from_name VARCHAR,
+  p_refresh_token TEXT,
+  p_access_token TEXT,
+  p_token_expiry TIMESTAMPTZ,
+  p_scope TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_credential_id UUID;
+  v_encryption_key TEXT;
+BEGIN
+  -- Clé de chiffrement
+  v_encryption_key := 'foxwise-email-encryption-key-2024'; -- CHANGEZ ÇA!
+
+  -- Upsert OAuth credentials
+  INSERT INTO fc_email_credentials (
+    company_id,
+    provider,
+    auth_method,
+    from_email,
+    from_name,
+    oauth_refresh_token_encrypted,
+    oauth_access_token_encrypted,
+    oauth_token_expiry,
+    oauth_scope,
+    is_verified
+  ) VALUES (
+    p_company_id,
+    p_provider,
+    'oauth',
+    p_from_email,
+    p_from_name,
+    encode(encrypt(p_refresh_token::bytea, v_encryption_key, 'aes'), 'base64'),
+    encode(encrypt(p_access_token::bytea, v_encryption_key, 'aes'), 'base64'),
+    p_token_expiry,
+    p_scope,
+    true -- OAuth est automatiquement vérifié
+  )
+  ON CONFLICT (company_id) DO UPDATE SET
+    provider = EXCLUDED.provider,
+    auth_method = EXCLUDED.auth_method,
+    from_email = EXCLUDED.from_email,
+    from_name = EXCLUDED.from_name,
+    oauth_refresh_token_encrypted = EXCLUDED.oauth_refresh_token_encrypted,
+    oauth_access_token_encrypted = EXCLUDED.oauth_access_token_encrypted,
+    oauth_token_expiry = EXCLUDED.oauth_token_expiry,
+    oauth_scope = EXCLUDED.oauth_scope,
+    is_verified = EXCLUDED.is_verified,
+    updated_at = NOW()
+  RETURNING id INTO v_credential_id;
+
+  RETURN v_credential_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ================================================================
+-- Fonction pour récupérer OAuth credentials (déchiffre les tokens)
+-- ================================================================
+CREATE OR REPLACE FUNCTION fc_get_oauth_credential(
+  p_company_id UUID
+) RETURNS TABLE (
+  id UUID,
+  provider VARCHAR,
+  from_email VARCHAR,
+  from_name VARCHAR,
+  refresh_token TEXT,
+  access_token TEXT,
+  token_expiry TIMESTAMPTZ,
+  scope TEXT,
+  is_verified BOOLEAN
+) AS $$
+DECLARE
+  v_encryption_key TEXT;
+BEGIN
+  v_encryption_key := 'foxwise-email-encryption-key-2024'; -- CHANGEZ ÇA!
+
+  RETURN QUERY
+  SELECT
+    ec.id,
+    ec.provider,
+    ec.from_email,
+    ec.from_name,
+    convert_from(decrypt(decode(ec.oauth_refresh_token_encrypted, 'base64'), v_encryption_key, 'aes'), 'UTF8') AS refresh_token,
+    convert_from(decrypt(decode(ec.oauth_access_token_encrypted, 'base64'), v_encryption_key, 'aes'), 'UTF8') AS access_token,
+    ec.oauth_token_expiry AS token_expiry,
+    ec.oauth_scope AS scope,
+    ec.is_verified
+  FROM fc_email_credentials ec
+  WHERE ec.company_id = p_company_id
+    AND ec.auth_method = 'oauth'
+    AND ec.is_active = true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ================================================================
 -- Presets pour les providers populaires
