@@ -160,6 +160,7 @@ export default function SettingsPage() {
             smtp_password: '', // Ne jamais charger le mot de passe pour la sécurité
             from_email: data.from_email || '',
             from_name: data.from_name || '',
+            auth_method: data.auth_method || 'smtp',
           })
           if (data.is_verified) {
             setEmailTestStatus('success')
