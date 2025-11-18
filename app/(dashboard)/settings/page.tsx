@@ -392,7 +392,7 @@ export default function SettingsPage() {
           {/* Provider Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">
-              Fournisseur d'email
+              Fournisseur d&apos;email
             </label>
             <select
               value={emailConfig.provider}
@@ -428,7 +428,7 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-400 mb-2">
                 Mot de passe
                 {emailConfig.provider === 'gmail' && (
-                  <span className="text-yellow-500 ml-1">(Mot de passe d'application)</span>
+                  <span className="text-yellow-500 ml-1">(Mot de passe d&apos;application)</span>
                 )}
               </label>
               <div className="relative">
@@ -454,7 +454,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
-                Email d'envoi (optionnel)
+                Email d&apos;envoi (optionnel)
               </label>
               <input
                 type="email"
@@ -463,11 +463,11 @@ export default function SettingsPage() {
                 placeholder={emailConfig.smtp_user || 'votre@email.com'}
                 className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
               />
-              <p className="text-xs text-gray-500 mt-1">Laissez vide pour utiliser l'email ci-dessus</p>
+              <p className="text-xs text-gray-500 mt-1">Laissez vide pour utiliser l&apos;email ci-dessus</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
-                Nom de l'expéditeur
+                Nom de l&apos;expéditeur
               </label>
               <input
                 type="text"
